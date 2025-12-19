@@ -77,7 +77,7 @@ import torch
 from datetime import datetime
 
 import omni
-from rsl_rl.runners import DistillationRunner, OnPolicyRunner
+from rsl_rl.runners import DistillationRunner, OnPolicyRunner   # 显示调用了rsl_rl库
 
 from isaaclab.envs import (
     DirectMARLEnv,

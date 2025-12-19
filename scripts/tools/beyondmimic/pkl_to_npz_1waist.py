@@ -13,6 +13,7 @@
 
 import argparse
 import numpy as np
+import joblib
 
 from isaaclab.app import AppLauncher
 
@@ -40,7 +41,7 @@ args_cli = parser.parse_args()
 if not args_cli.output_name:
     # generate at the same location as input file
     args_cli.output_name = (
-        "/".join(args_cli.input_file.split("/")[:-1]) + "/" + args_cli.input_file.split("/")[-1].replace(".csv", ".npz")
+        "/".join(args_cli.input_file.split("/")[:-1]) + "/" + args_cli.input_file.split("/")[-1].replace(".pkl", ".npz")
     )
 
 
@@ -63,7 +64,7 @@ from isaaclab.utils.math import axis_angle_from_quat, quat_conjugate, quat_mul, 
 ##
 # Pre-defined configs
 ##
-from robot_lab.assets.unitree import UNITREE_G1_29DOF_CFG
+from robot_lab.assets.unitree import UNITREE_G1_23DOF_CFG
 
 
 @configclass
@@ -83,8 +84,10 @@ class ReplayMotionsSceneCfg(InteractiveSceneCfg):
     )
 
     # articulation
-    robot: ArticulationCfg = UNITREE_G1_29DOF_CFG.replace(prim_path="{ENV_REGEX_NS}/Robot")
+    robot: ArticulationCfg = UNITREE_G1_23DOF_CFG.replace(prim_path="{ENV_REGEX_NS}/Robot")
 
+def ToTensor(array, device):
+    return torch.tensor(array, dtype=torch.float32, device=device)
 
 class MotionLoader:
     def __init__(
@@ -110,7 +113,11 @@ class MotionLoader:
     def _load_motion(self):
         """Loads the motion from the csv file."""
         if self.frame_range is None:
-            motion = torch.from_numpy(np.loadtxt(self.motion_file, delimiter=","))
+            motion = joblib.load(self.motion_file)
+            self.motion_base_poss_input = ToTensor(motion['root_pos'], device=self.device)
+            self.motion_base_rots_input = ToTensor(motion['root_rot'], device=self.device)
+            self.motion_base_rots_input = self.motion_base_rots_input[:, [3, 0, 1, 2]]
+            self.motion_dof_poss_input = ToTensor(motion['dof_pos'], device=self.device)
         else:
             motion = torch.from_numpy(
                 np.loadtxt(
@@ -120,13 +127,13 @@ class MotionLoader:
                     max_rows=self.frame_range[1] - self.frame_range[0] + 1,
                 )
             )
-        motion = motion.to(torch.float32).to(self.device)
-        self.motion_base_poss_input = motion[:, :3]
-        self.motion_base_rots_input = motion[:, 3:7]
-        self.motion_base_rots_input = self.motion_base_rots_input[:, [3, 0, 1, 2]]  # convert to wxyz
-        self.motion_dof_poss_input = motion[:, 7:]
+            motion = joblib.load(self.motion_file)
+            self.motion_base_poss_input = ToTensor(motion['root_pos'][self.frame_range[0]: self.frame_range[1]+1], device=self.device)
+            self.motion_base_rots_input = ToTensor(motion['root_rot'][self.frame_range[0]: self.frame_range[1]+1], device=self.device)
+            self.motion_base_rots_input = self.motion_base_rots_input[:, [3, 0, 1, 2]]
+            self.motion_dof_poss_input = ToTensor(motion['dof_pos'][self.frame_range[0]: self.frame_range[1]+1], device=self.device)
 
-        self.input_frames = motion.shape[0]
+        self.input_frames = self.motion_base_poss_input.shape[0]
         self.duration = (self.input_frames - 1) * self.input_dt # 运动序列所耗时间(s)
         print(f"Motion loaded ({self.motion_file}), duration: {self.duration} sec, frames: {self.input_frames}")
 
@@ -250,22 +257,16 @@ def run_simulator(sim: sim_utils.SimulationContext, scene: InteractiveScene):
         "right_ankle_pitch_joint",
         "right_ankle_roll_joint",
         "waist_yaw_joint",
-        "waist_roll_joint",
-        "waist_pitch_joint",
         "left_shoulder_pitch_joint",
         "left_shoulder_roll_joint",
         "left_shoulder_yaw_joint",
         "left_elbow_joint",
         "left_wrist_roll_joint",
-        "left_wrist_pitch_joint",
-        "left_wrist_yaw_joint",
         "right_shoulder_pitch_joint",
         "right_shoulder_roll_joint",
         "right_shoulder_yaw_joint",
         "right_elbow_joint",
         "right_wrist_roll_joint",
-        "right_wrist_pitch_joint",
-        "right_wrist_yaw_joint",
     ]
     robot_joint_indexes = robot.find_joints(joint_sdk_names, preserve_order=True)[0]
 
