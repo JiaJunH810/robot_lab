@@ -14,8 +14,8 @@ if TYPE_CHECKING:
 from isaaclab.assets import Articulation, RigidObject
 from isaaclab.managers import SceneEntityCfg
 
-from robot_lab.tasks.manager_based.beyondmimic.mdp.commands import MotionCommand
-from robot_lab.tasks.manager_based.beyondmimic.mdp.rewards import _get_body_indexes
+from robot_lab.tasks.manager_based.beyondmimic_1waist.mdp.commands import MotionCommand
+from robot_lab.tasks.manager_based.beyondmimic_1waist.mdp.rewards import _get_body_indexes
 
 
 def bad_anchor_pos(env: ManagerBasedRLEnv, command_name: str, threshold: float) -> torch.Tensor:

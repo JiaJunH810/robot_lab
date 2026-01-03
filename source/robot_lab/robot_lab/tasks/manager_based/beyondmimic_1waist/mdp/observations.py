@@ -8,7 +8,7 @@ from typing import TYPE_CHECKING
 
 from isaaclab.utils.math import matrix_from_quat, subtract_frame_transforms
 
-from robot_lab.tasks.manager_based.beyondmimic.mdp.commands import MotionCommand
+from robot_lab.tasks.manager_based.beyondmimic_1waist.mdp.commands import MotionCommand
 
 if TYPE_CHECKING:
     from isaaclab.envs import ManagerBasedEnv
@@ -69,7 +69,6 @@ def motion_anchor_pos_b(env: ManagerBasedEnv, command_name: str) -> torch.Tensor
         command.anchor_pos_w,
         command.anchor_quat_w,
     )
-
     return pos.view(env.num_envs, -1)
 
 

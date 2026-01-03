@@ -23,7 +23,7 @@ from rsl_rl.modules import (
 from rsl_rl.storage import RolloutStorage
 from rsl_rl.utils import resolve_obs_groups
 from rsl_rl.utils.logger import Logger
-
+import statistics
 
 class OnPolicyRunner:
     """On-policy runner for training and evaluation of actor-critic methods."""
@@ -78,6 +78,7 @@ class OnPolicyRunner:
         # Start training
         start_it = self.current_learning_iteration
         total_it = start_it + num_learning_iterations
+        greater_episode = 0.
         for it in range(start_it, total_it):
             start = time.time()
             # Rollout
@@ -126,6 +127,9 @@ class OnPolicyRunner:
             # Save model
             if it % self.cfg["save_interval"] == 0:
                 self.save(os.path.join(self.logger.log_dir, f"model_{it}.pt"))  # type: ignore
+            if statistics.mean(self.logger.lenbuffer) > greater_episode:
+                greater_episode = statistics.mean(self.logger.lenbuffer)
+                self.save(os.path.join(self.logger.log_dir, f"greater_episode.pt"))
 
         # Save the final model after training
         if self.logger.log_dir is not None and not self.logger.disable_logs:

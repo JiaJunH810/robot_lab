@@ -43,7 +43,7 @@ class MotionLoader:
         self._body_lin_vel_w = torch.tensor(data["body_lin_vel_w"], dtype=torch.float32, device=device)
         self._body_ang_vel_w = torch.tensor(data["body_ang_vel_w"], dtype=torch.float32, device=device)
         self._body_indexes = body_indexes
-        self.time_step_total = self.joint_pos.shape[0]  # 表示帧数
+        self.time_step_total = torch.tensor(self.joint_pos.shape[0], device=device)  # 表示帧数
 
     @property
     def body_pos_w(self) -> torch.Tensor:
@@ -60,7 +60,58 @@ class MotionLoader:
     @property
     def body_ang_vel_w(self) -> torch.Tensor:
         return self._body_ang_vel_w[:, self._body_indexes]
+    
+    def _compute_frame_blend(self, times: torch.Tensor) -> torch.Tensor:
+        """Computes the frame blend for the motion."""
+        max_idx = self.time_step_total - 1
+        phase = times / max_idx
+        index_0 = (phase * max_idx).floor().long()
+        index_0 = torch.clamp(index_0, 0, max_idx)
+        index_1 = torch.minimum(index_0 + 1, max_idx)
+        blend = phase * max_idx - index_0
+        return index_0, index_1, blend
 
+    def _lerp(self, a: torch.Tensor, b: torch.Tensor, blend: torch.Tensor) -> torch.Tensor:
+        """Linear interpolation between two tensors."""
+        weight = blend.view(-1, *[1] * (a.ndim - 1))
+        return torch.lerp(a, b, weight)
+    
+    def _slerp(self, q0: torch.Tensor, q1: torch.Tensor, blend: torch.Tensor) -> torch.Tensor:
+        """Spherical linear interpolation between two quaternions."""
+        t = blend.view(-1, *[1] * (q0.ndim - 1))
+        dot = (q0 * q1).sum(dim=-1, keepdim=True)
+        neg_mask = dot < 0.0
+        q1 = torch.where(neg_mask, -q1, q1)
+        dot = torch.where(neg_mask, -dot, dot)
+        dot = torch.clamp(dot, -1.0, 1.0)
+        theta = torch.acos(dot)
+        sin_theta = torch.sin(theta)
+        epsilon = 1e-6
+        safe_mask = sin_theta > epsilon
+        w0 = torch.sin((1.0 - t) * theta) / sin_theta
+        w1 = torch.sin(t * theta) / sin_theta
+        res_slerp = w0 * q0 + w1 * q1
+        res_lerp = (1.0 - t) * q0 + t * q1
+        res = torch.where(safe_mask, res_slerp, res_lerp)
+        res = res / res.norm(dim=-1, keepdim=True)
+        return res
+
+    def sample(self, time_steps: torch.Tensor) -> dict:
+        index_0, index_1, blend = self._compute_frame_blend(times=time_steps)
+        joint_pos = self._lerp(self.joint_pos[index_0], self.joint_pos[index_1], blend)
+        joint_vel = self._lerp(self.joint_vel[index_0], self.joint_vel[index_1], blend)
+        body_pos_w = self._lerp(self.body_pos_w[index_0], self.body_pos_w[index_1], blend)
+        body_quat_w = self._slerp(self.body_quat_w[index_0], self.body_quat_w[index_1], blend)
+        body_lin_vel_w = self._lerp(self.body_lin_vel_w[index_0], self.body_lin_vel_w[index_1], blend)
+        body_ang_vel_w = self._lerp(self.body_ang_vel_w[index_0], self.body_ang_vel_w[index_1], blend)
+        return {
+            "joint_pos": joint_pos,
+            "joint_vel": joint_vel,
+            "body_pos_w": body_pos_w,
+            "body_quat_w": body_quat_w,
+            "body_lin_vel_w": body_lin_vel_w,
+            "body_ang_vel_w": body_ang_vel_w
+        }
 
 class MotionCommand(CommandTerm):
     cfg: MotionCommandCfg
@@ -76,13 +127,15 @@ class MotionCommand(CommandTerm):
         )
 
         self.motion = MotionLoader(self.cfg.motion_file, self.body_indexes, device=self.device)
-        self.time_steps = torch.zeros(self.num_envs, dtype=torch.long, device=self.device)  # 记录每个机器人当前播放到了动作文件的第几帧
+        self.time_steps = torch.zeros(self.num_envs, dtype=torch.float32, device=self.device)  # 记录每个机器人当前播放到了动作文件的第几帧
+        self.current_sample = self.motion.sample(self.time_steps)
+        self.elastic = torch.ones(self.num_envs, dtype=torch.float32, device=self.device)
         self.body_pos_relative_w = torch.zeros(self.num_envs, len(cfg.body_names), 3, device=self.device)
         self.body_quat_relative_w = torch.zeros(self.num_envs, len(cfg.body_names), 4, device=self.device)
         self.body_quat_relative_w[:, :, 0] = 1.0
 
         # 自适应采样
-        self.bin_count = int(self.motion.time_step_total // (1 / (env.cfg.decimation * env.cfg.sim.dt))) + 1    # 本质：如果机器人走完这个动作，一共需要多少次力矩控制
+        self.bin_count = int(self.motion.time_step_total // (1 / (env.cfg.decimation * env.cfg.sim.dt))) + 1    # 根据控制频率(50HZ)将运动序列分段
         self.bin_failed_count = torch.zeros(self.bin_count, dtype=torch.float, device=self.device)  # 记录了从训练开始到现在，所有机器人在第N个格子上摔倒了几次
         self._current_bin_failed = torch.zeros(self.bin_count, dtype=torch.float, device=self.device)   # 只记录这一个step里有哪些机器人摔倒了，稍后会合进总账
         # 这是一个衰减权重的卷积核
@@ -103,50 +156,52 @@ class MotionCommand(CommandTerm):
         self.metrics["sampling_entropy"] = torch.zeros(self.num_envs, device=self.device)
         self.metrics["sampling_top1_prob"] = torch.zeros(self.num_envs, device=self.device)
         self.metrics["sampling_top1_bin"] = torch.zeros(self.num_envs, device=self.device)
+        self.metrics["elastic"] = self.elastic.clone()
 
+    # @property装饰器， 使得可以像访问变量一样访问函数
     @property
     def command(self) -> torch.Tensor:  # TODO Consider again if this is the best observation
         return torch.cat([self.joint_pos, self.joint_vel], dim=1)
 
     @property
     def joint_pos(self) -> torch.Tensor:
-        return self.motion.joint_pos[self.time_steps]
+        return self.current_sample['joint_pos']
 
     @property
     def joint_vel(self) -> torch.Tensor:
-        return self.motion.joint_vel[self.time_steps]
+        return self.current_sample['joint_vel']
 
     @property
     def body_pos_w(self) -> torch.Tensor:
-        return self.motion.body_pos_w[self.time_steps] + self._env.scene.env_origins[:, None, :]
+        return self.current_sample['body_pos_w'] + self._env.scene.env_origins[:, None, :]
 
     @property
     def body_quat_w(self) -> torch.Tensor:
-        return self.motion.body_quat_w[self.time_steps]
+        return self.current_sample['body_quat_w']
 
     @property
     def body_lin_vel_w(self) -> torch.Tensor:
-        return self.motion.body_lin_vel_w[self.time_steps]
+        return self.current_sample['body_lin_vel_w']
 
     @property
     def body_ang_vel_w(self) -> torch.Tensor:
-        return self.motion.body_ang_vel_w[self.time_steps]
+        return self.current_sample['body_ang_vel_w']
 
     @property
     def anchor_pos_w(self) -> torch.Tensor:
-        return self.motion.body_pos_w[self.time_steps, self.motion_anchor_body_index] + self._env.scene.env_origins
+        return self.current_sample['body_pos_w'][:, self.motion_anchor_body_index] + self._env.scene.env_origins
 
     @property
     def anchor_quat_w(self) -> torch.Tensor:
-        return self.motion.body_quat_w[self.time_steps, self.motion_anchor_body_index]
+        return self.current_sample['body_quat_w'][:, self.motion_anchor_body_index]
 
     @property
     def anchor_lin_vel_w(self) -> torch.Tensor:
-        return self.motion.body_lin_vel_w[self.time_steps, self.motion_anchor_body_index]
+        return self.current_sample['body_lin_vel_w'][:, self.motion_anchor_body_index]
 
     @property
     def anchor_ang_vel_w(self) -> torch.Tensor:
-        return self.motion.body_ang_vel_w[self.time_steps, self.motion_anchor_body_index]
+        return self.current_sample['body_ang_vel_w'][:, self.motion_anchor_body_index]
 
     @property
     def robot_joint_pos(self) -> torch.Tensor:
@@ -187,8 +242,25 @@ class MotionCommand(CommandTerm):
     @property
     def robot_anchor_ang_vel_w(self) -> torch.Tensor:
         return self.robot.data.body_ang_vel_w[:, self.robot_anchor_body_index]
+    
+    def calc_similarity(self, k) -> torch.Tensor:
+        error_body_ang_vel = torch.norm(self.body_ang_vel_w - self.robot_body_ang_vel_w, dim=-1).mean(dim=-1)
+        error_body_pos = torch.norm(self.body_pos_relative_w - self.robot_body_pos_w, dim=-1).mean(dim=-1)
+        error_body_rot = quat_error_magnitude(self.body_quat_relative_w, self.robot_body_quat_w).mean(dim=-1)
+        error_joint_pos = torch.norm(self.joint_pos - self.robot_joint_pos, dim=-1)
+        error_joint_vel = torch.norm(self.joint_vel - self.robot_joint_vel, dim=-1)
 
-    def _update_metrics(self):
+        error_body_ang_vel_norm = error_body_ang_vel / 8.0
+        error_body_pos_norm = error_body_pos / 0.3
+        error_body_rot_norm = error_body_rot / 0.8
+        error_joint_pos_norm =  error_joint_pos / 3.0
+        error_joint_vel_norm = error_joint_vel / 30.0
+
+        similarity = error_body_ang_vel_norm * 0.1 + error_body_pos_norm * 0.1 + error_body_rot_norm * 0.2 + error_joint_pos_norm * 0.5 + error_joint_vel_norm * 0.1
+        similarity = torch.exp(-similarity * k)
+        return similarity
+
+    def _update_metrics(self):  # 计算与参考动作的误差
         self.metrics["error_anchor_pos"] = torch.norm(self.anchor_pos_w - self.robot_anchor_pos_w, dim=-1)
         self.metrics["error_anchor_rot"] = quat_error_magnitude(self.anchor_quat_w, self.robot_anchor_quat_w)
         self.metrics["error_anchor_lin_vel"] = torch.norm(self.anchor_lin_vel_w - self.robot_anchor_lin_vel_w, dim=-1)
@@ -210,18 +282,20 @@ class MotionCommand(CommandTerm):
 
         self.metrics["error_joint_pos"] = torch.norm(self.joint_pos - self.robot_joint_pos, dim=-1)
         self.metrics["error_joint_vel"] = torch.norm(self.joint_vel - self.robot_joint_vel, dim=-1)
+        self.metrics["elastic"] = self.elastic.clone()
 
     def _adaptive_sampling(self, env_ids: Sequence[int]):
-        episode_failed = self._env.termination_manager.terminated[env_ids]
+        episode_failed = self._env.termination_manager.terminated[env_ids]  # 读取非超时而终结的环境
         if torch.any(episode_failed):
+            # 算出当前是在第几个时间段(Bin)结束掉的
             current_bin_index = torch.clamp(
-                (self.time_steps * self.bin_count) // max(self.motion.time_step_total, 1), 0, self.bin_count - 1
+                (self.time_steps.long() * self.bin_count) // max(self.motion.time_step_total, 1), 0, self.bin_count - 1
             )
-            fail_bins = current_bin_index[env_ids][episode_failed]
-            self._current_bin_failed[:] = torch.bincount(fail_bins, minlength=self.bin_count)
+            fail_bins = current_bin_index[env_ids][episode_failed]  # 筛选出那些“真正失败”（不是超时)的环境对应的Bin
+            self._current_bin_failed[:] = torch.bincount(fail_bins, minlength=self.bin_count)   # 统计每个Bin的失败次数
 
         # Sample
-        sampling_probabilities = self.bin_failed_count + self.cfg.adaptive_uniform_ratio / float(self.bin_count)
+        sampling_probabilities = self.bin_failed_count + self.cfg.adaptive_uniform_ratio / float(self.bin_count)    # 基础概率 = 历史失败次数 + 一个很小的均匀底数 (防止有些地方一次都没失败过导致概率为0)
         sampling_probabilities = torch.nn.functional.pad(
             sampling_probabilities.unsqueeze(0).unsqueeze(0),
             (0, self.cfg.adaptive_kernel_size - 1),  # Non-causal kernel
@@ -229,19 +303,20 @@ class MotionCommand(CommandTerm):
         )
         sampling_probabilities = torch.nn.functional.conv1d(sampling_probabilities, self.kernel.view(1, 1, -1)).view(-1)
 
-        sampling_probabilities = sampling_probabilities / sampling_probabilities.sum()
+        sampling_probabilities = sampling_probabilities / sampling_probabilities.sum()  # 归一化(让总和为1)
 
-        sampled_bins = torch.multinomial(sampling_probabilities, len(env_ids), replacement=True)
+        sampled_bins = torch.multinomial(sampling_probabilities, len(env_ids), replacement=True)    # 抽签：根据刚才算的概率分布，决定每个环境从哪个 Bin 开始
 
+        # 随机化从段中的具体哪个帧开始
         self.time_steps[env_ids] = (
             (sampled_bins + sample_uniform(0.0, 1.0, (len(env_ids),), device=self.device))
             / self.bin_count
             * (self.motion.time_step_total - 1)
-        ).long()
+        ).float()
 
         # Metrics
-        H = -(sampling_probabilities * (sampling_probabilities + 1e-12).log()).sum()
-        H_norm = H / math.log(self.bin_count)
+        H = -(sampling_probabilities * (sampling_probabilities + 1e-12).log()).sum()    # 计算香农熵，用来描述混乱程度和不确定性。熵很高说明概率平坦，熵很低说明概率分布尖锐
+        H_norm = H / math.log(self.bin_count)   # 归一化熵
         pmax, imax = sampling_probabilities.max(dim=0)
         self.metrics["sampling_entropy"][:] = H_norm
         self.metrics["sampling_top1_prob"][:] = pmax
@@ -251,13 +326,14 @@ class MotionCommand(CommandTerm):
         if len(env_ids) == 0:
             return
         self._adaptive_sampling(env_ids)
+        self.current_sample = self.motion.sample(self.time_steps)
 
         root_pos = self.body_pos_w[:, 0].clone()
         root_ori = self.body_quat_w[:, 0].clone()
         root_lin_vel = self.body_lin_vel_w[:, 0].clone()
         root_ang_vel = self.body_ang_vel_w[:, 0].clone()
 
-        range_list = [self.cfg.pose_range.get(key, (0.0, 0.0)) for key in ["x", "y", "z", "roll", "pitch", "yaw"]]
+        range_list = [self.cfg.pose_range.get(key, (0.0, 0.0)) for key in ["x", "y", "z", "roll", "pitch", "yaw"]]  # 读取配置里的噪声范围
         ranges = torch.tensor(range_list, device=self.device)
         rand_samples = sample_uniform(ranges[:, 0], ranges[:, 1], (len(env_ids), 6), device=self.device)
         root_pos[env_ids] += rand_samples[:, 0:3]
@@ -272,11 +348,12 @@ class MotionCommand(CommandTerm):
         joint_pos = self.joint_pos.clone()
         joint_vel = self.joint_vel.clone()
 
-        joint_pos += sample_uniform(*self.cfg.joint_position_range, joint_pos.shape, joint_pos.device)
+        joint_pos += sample_uniform(*self.cfg.joint_position_range, joint_pos.shape, joint_pos.device)  # 关节也加噪音
         soft_joint_pos_limits = self.robot.data.soft_joint_pos_limits[env_ids]
         joint_pos[env_ids] = torch.clip(
             joint_pos[env_ids], soft_joint_pos_limits[:, :, 0], soft_joint_pos_limits[:, :, 1]
         )
+        # 将机器人的状态写到仿真中去
         self.robot.write_joint_state_to_sim(joint_pos[env_ids], joint_vel[env_ids], env_ids=env_ids)
         self.robot.write_root_state_to_sim(
             torch.cat([root_pos[env_ids], root_ori[env_ids], root_lin_vel[env_ids], root_ang_vel[env_ids]], dim=-1),
@@ -284,9 +361,12 @@ class MotionCommand(CommandTerm):
         )
 
     def _update_command(self):
-        self.time_steps += 1
-        env_ids = torch.where(self.time_steps >= self.motion.time_step_total)[0]
+        self.time_steps += 1    # 这一帧结束了，进度条往前走一格
+        self.current_sample = self.motion.sample(self.time_steps)
+        env_ids = torch.where(self.time_steps >= self.motion.time_step_total)[0]    # 找到超时的环境
         self._resample_command(env_ids)
+        similarity = self.calc_similarity(k=1.)
+        self.elastic = self.cfg.e_max - (self.cfg.e_max - self.cfg.e_min) * similarity
 
         anchor_pos_w_repeat = self.anchor_pos_w[:, None, :].repeat(1, len(self.cfg.body_names), 1)
         anchor_quat_w_repeat = self.anchor_quat_w[:, None, :].repeat(1, len(self.cfg.body_names), 1)
@@ -294,12 +374,18 @@ class MotionCommand(CommandTerm):
         robot_anchor_quat_w_repeat = self.robot_anchor_quat_w[:, None, :].repeat(1, len(self.cfg.body_names), 1)
 
         delta_pos_w = robot_anchor_pos_w_repeat
-        delta_pos_w[..., 2] = anchor_pos_w_repeat[..., 2]
-        delta_ori_w = yaw_quat(quat_mul(robot_anchor_quat_w_repeat, quat_inv(anchor_quat_w_repeat)))
+        delta_pos_w[..., 2] = anchor_pos_w_repeat[..., 2]   # 将高度调节为参考动作的高度
+        delta_ori_w = yaw_quat(quat_mul(robot_anchor_quat_w_repeat, quat_inv(anchor_quat_w_repeat)))    # 算出机器人当前朝向和参考动作的朝向之间在yaw上的偏差
 
-        self.body_quat_relative_w = quat_mul(delta_ori_w, self.body_quat_w)
+        self.body_quat_relative_w = quat_mul(delta_ori_w, self.body_quat_w) # 把参考动作的身体部件全部旋转一下，使得与机器人脸朝一个方向
+
+        # 位置对齐：
+        # (a) self.body_pos_w - anchor_pos_w_repeat: 算出参考动作里，手脚相对于它自己基座的偏移量
+        # (b) quat_apply(delta_ori_w, ...): 把这个偏移量旋转一下（跟着机器人转）
+        # (c) + delta_pos_w: 把旋转后的偏移量，加到机器人的当前位置上
         self.body_pos_relative_w = delta_pos_w + quat_apply(delta_ori_w, self.body_pos_w - anchor_pos_w_repeat)
 
+        # 每个段中历史累积的失败次数(EMA)
         self.bin_failed_count = (
             self.cfg.adaptive_alpha * self._current_bin_failed + (1 - self.cfg.adaptive_alpha) * self.bin_failed_count
         )
@@ -359,7 +445,7 @@ class MotionCommand(CommandTerm):
 class MotionCommandCfg(CommandTermCfg):
     """Configuration for the motion command."""
 
-    class_type: type = MotionCommand
+    class_type: type = MotionCommand    # 这里把config和class锁死了。这意味着只要用了MotionCommandCfg，系统就必须去实例化MotionCommand这个类
 
     asset_name: str = MISSING   # MISSING表示先空着，但是一定要赋值
 
@@ -382,3 +468,5 @@ class MotionCommandCfg(CommandTermCfg):
 
     body_visualizer_cfg: VisualizationMarkersCfg = FRAME_MARKER_CFG.replace(prim_path="/Visuals/Command/pose")
     body_visualizer_cfg.markers["frame"].scale = (0.1, 0.1, 0.1)
+
+    e_min, e_max = 1, 3

@@ -24,7 +24,7 @@ from isaaclab.terrains import TerrainImporterCfg
 from isaaclab.utils import configclass
 from isaaclab.utils.noise import AdditiveUniformNoiseCfg as Unoise
 
-import robot_lab.tasks.manager_based.beyondmimic.mdp as mdp
+import robot_lab.tasks.manager_based.beyondmimic_1waist.mdp as mdp
 
 ##
 # Scene definition
@@ -80,11 +80,12 @@ class MySceneCfg(InteractiveSceneCfg):
 # MDP settings
 ##
 
+# @configclass装饰器可以省去__init__函数，并且让变量自动变成self.中
 
 @configclass
 class CommandsCfg:
     """Command specifications for the MDP."""
-
+    # 此处定义了命令, 并且注意这里的变量名为"motion"
     motion = mdp.MotionCommandCfg(
         asset_name="robot",
         resampling_time_range=(1.0e9, 1.0e9),
@@ -116,7 +117,8 @@ class ObservationsCfg:
     @configclass
     class PolicyCfg(ObsGroup):
         """Observations for policy group."""
-
+        # 根据写的顺序将参数放入网络中
+        
         # observation terms (order preserved)
         command = ObsTerm(func=mdp.generated_commands, params={"command_name": "motion"})
         motion_anchor_pos_b = ObsTerm(

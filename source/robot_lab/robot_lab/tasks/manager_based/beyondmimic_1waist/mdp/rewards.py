@@ -10,7 +10,7 @@ from isaaclab.managers import SceneEntityCfg
 from isaaclab.sensors import ContactSensor
 from isaaclab.utils.math import quat_error_magnitude
 
-from robot_lab.tasks.manager_based.beyondmimic.mdp.commands import MotionCommand
+from robot_lab.tasks.manager_based.beyondmimic_1waist.mdp.commands import MotionCommand
 
 if TYPE_CHECKING:
     from isaaclab.envs import ManagerBasedRLEnv

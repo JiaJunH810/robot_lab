@@ -19,6 +19,8 @@ gym.register(
     },
 )
 '''
+entry_point: 选取哪种环境
+
 环境配置 (物理世界、奖励、观测)：
     类名: UnitreeG1BeyondMimicFlatEnvCfg
     文件名: flat_env_cfg.py

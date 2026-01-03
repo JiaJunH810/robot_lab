@@ -6,7 +6,7 @@ import os
 from isaaclab.utils import configclass
 
 from robot_lab.assets.unitree import UNITREE_G1_23DOF_ACTION_SCALE, UNITREE_G1_23DOF_CFG
-from robot_lab.tasks.manager_based.beyondmimic.tracking_env_cfg import BeyondMimicEnvCfg
+from robot_lab.tasks.manager_based.beyondmimic_1waist.tracking_env_cfg import BeyondMimicEnvCfg
 
 
 @configclass
@@ -35,6 +35,7 @@ class UnitreeG1BeyondMimicFlatEnvCfg(BeyondMimicEnvCfg):
             "right_wrist_roll_rubber_hand",
         ]
 
+        # 在此处将两个观测设置为了None
         self.observations.policy.motion_anchor_pos_b = None
         self.observations.policy.base_lin_vel = None
 
