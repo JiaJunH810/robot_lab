@@ -10,6 +10,7 @@ import torch
 from collections.abc import Sequence
 from dataclasses import MISSING
 from typing import TYPE_CHECKING
+import glob
 
 from isaaclab.assets import Articulation
 from isaaclab.managers import CommandTerm, CommandTermCfg
@@ -32,18 +33,41 @@ if TYPE_CHECKING:
 
 class MotionLoader:
     def __init__(self, motion_file: str, body_indexes: Sequence[int], device: str = "cpu"):
-        assert os.path.isfile(motion_file), f"Invalid file path: {motion_file}"
-        # 这些joint_pos, joint_vel在转成npz文件的时候就获取了？
-        data = np.load(motion_file)
-        self.fps = data["fps"]
-        self.joint_pos = torch.tensor(data["joint_pos"], dtype=torch.float32, device=device)
-        self.joint_vel = torch.tensor(data["joint_vel"], dtype=torch.float32, device=device)
-        self._body_pos_w = torch.tensor(data["body_pos_w"], dtype=torch.float32, device=device)
-        self._body_quat_w = torch.tensor(data["body_quat_w"], dtype=torch.float32, device=device)
-        self._body_lin_vel_w = torch.tensor(data["body_lin_vel_w"], dtype=torch.float32, device=device)
-        self._body_ang_vel_w = torch.tensor(data["body_ang_vel_w"], dtype=torch.float32, device=device)
+        if os.path.isfile(motion_file):
+            files = glob.glob(motion_file)
+        else:
+            files = glob.glob(f"{motion_file}/*.npz")
+        assert len(files) != 0, f"Invalid file path: {motion_file}"
+
+        self.time_step_total = []
+        self.joint_pos = []
+        self.joint_vel = []
+        self._body_pos_w = []
+        self._body_quat_w = []
+        self._body_lin_vel_w = []
+        self._body_ang_vel_w = []
+        self.num_motions = len(files)
+
+        for motion_file in files:
+            data = np.load(motion_file)
+            self.fps = data['fps']
+            self.joint_pos.append(torch.tensor(data["joint_pos"], dtype=torch.float32, device=device))
+            self.joint_vel.append(torch.tensor(data["joint_vel"], dtype=torch.float32, device=device))
+            self._body_pos_w.append(torch.tensor(data["body_pos_w"], dtype=torch.float32, device=device))
+            self._body_quat_w.append(torch.tensor(data["body_quat_w"], dtype=torch.float32, device=device))
+            self._body_lin_vel_w.append(torch.tensor(data["body_lin_vel_w"], dtype=torch.float32, device=device))
+            self._body_ang_vel_w.append(torch.tensor(data["body_ang_vel_w"], dtype=torch.float32, device=device))
+            self.time_step_total.append(data['joint_pos'].shape[0])
         self._body_indexes = body_indexes
-        self.time_step_total = torch.tensor(self.joint_pos.shape[0], device=device)  # 表示帧数
+        
+        self.joint_pos = torch.cat(self.joint_pos, dim=0)
+        self.joint_vel = torch.cat(self.joint_vel, dim=0)
+        self._body_pos_w = torch.cat(self._body_pos_w, dim=0)
+        self._body_quat_w = torch.cat(self._body_quat_w, dim=0)
+        self._body_lin_vel_w = torch.cat(self._body_lin_vel_w, dim=0)
+        self._body_ang_vel_w = torch.cat(self._body_ang_vel_w, dim=0)
+        self.time_step_total = torch.tensor(self.time_step_total, device=device, dtype=torch.long)
+        self.motion_starts = torch.cat([torch.tensor([0], device=device), torch.cumsum(self.time_step_total, dim=0)[:-1]])
 
     @property
     def body_pos_w(self) -> torch.Tensor:
@@ -60,58 +84,6 @@ class MotionLoader:
     @property
     def body_ang_vel_w(self) -> torch.Tensor:
         return self._body_ang_vel_w[:, self._body_indexes]
-    
-    def _compute_frame_blend(self, times: torch.Tensor) -> torch.Tensor:
-        """Computes the frame blend for the motion."""
-        max_idx = self.time_step_total - 1
-        phase = times / max_idx
-        index_0 = (phase * max_idx).floor().long()
-        index_0 = torch.clamp(index_0, 0, max_idx)
-        index_1 = torch.minimum(index_0 + 1, max_idx)
-        blend = phase * max_idx - index_0
-        return index_0, index_1, blend
-
-    def _lerp(self, a: torch.Tensor, b: torch.Tensor, blend: torch.Tensor) -> torch.Tensor:
-        """Linear interpolation between two tensors."""
-        weight = blend.view(-1, *[1] * (a.ndim - 1))
-        return torch.lerp(a, b, weight)
-    
-    def _slerp(self, q0: torch.Tensor, q1: torch.Tensor, blend: torch.Tensor) -> torch.Tensor:
-        """Spherical linear interpolation between two quaternions."""
-        t = blend.view(-1, *[1] * (q0.ndim - 1))
-        dot = (q0 * q1).sum(dim=-1, keepdim=True)
-        neg_mask = dot < 0.0
-        q1 = torch.where(neg_mask, -q1, q1)
-        dot = torch.where(neg_mask, -dot, dot)
-        dot = torch.clamp(dot, -1.0, 1.0)
-        theta = torch.acos(dot)
-        sin_theta = torch.sin(theta)
-        epsilon = 1e-6
-        safe_mask = sin_theta > epsilon
-        w0 = torch.sin((1.0 - t) * theta) / sin_theta
-        w1 = torch.sin(t * theta) / sin_theta
-        res_slerp = w0 * q0 + w1 * q1
-        res_lerp = (1.0 - t) * q0 + t * q1
-        res = torch.where(safe_mask, res_slerp, res_lerp)
-        res = res / res.norm(dim=-1, keepdim=True)
-        return res
-
-    def sample(self, time_steps: torch.Tensor) -> dict:
-        index_0, index_1, blend = self._compute_frame_blend(times=time_steps)
-        joint_pos = self._lerp(self.joint_pos[index_0], self.joint_pos[index_1], blend)
-        joint_vel = self._lerp(self.joint_vel[index_0], self.joint_vel[index_1], blend)
-        body_pos_w = self._lerp(self.body_pos_w[index_0], self.body_pos_w[index_1], blend)
-        body_quat_w = self._slerp(self.body_quat_w[index_0], self.body_quat_w[index_1], blend)
-        body_lin_vel_w = self._lerp(self.body_lin_vel_w[index_0], self.body_lin_vel_w[index_1], blend)
-        body_ang_vel_w = self._lerp(self.body_ang_vel_w[index_0], self.body_ang_vel_w[index_1], blend)
-        return {
-            "joint_pos": joint_pos,
-            "joint_vel": joint_vel,
-            "body_pos_w": body_pos_w,
-            "body_quat_w": body_quat_w,
-            "body_lin_vel_w": body_lin_vel_w,
-            "body_ang_vel_w": body_ang_vel_w
-        }
 
 class MotionCommand(CommandTerm):
     cfg: MotionCommandCfg
@@ -127,17 +99,17 @@ class MotionCommand(CommandTerm):
         )
 
         self.motion = MotionLoader(self.cfg.motion_file, self.body_indexes, device=self.device)
-        self.time_steps = torch.zeros(self.num_envs, dtype=torch.float32, device=self.device)  # 记录每个机器人当前播放到了动作文件的第几帧
-        self.current_sample = self.motion.sample(self.time_steps)
-        self.elastic = torch.ones(self.num_envs, dtype=torch.float32, device=self.device)
+        self.motion_ids = torch.arange(self.num_envs, device=self.device) % self.motion.num_motions
+        self.time_steps = torch.zeros(self.num_envs, dtype=torch.long, device=self.device)  # 记录每个机器人当前播放到了动作文件的第几帧
+
         self.body_pos_relative_w = torch.zeros(self.num_envs, len(cfg.body_names), 3, device=self.device)
         self.body_quat_relative_w = torch.zeros(self.num_envs, len(cfg.body_names), 4, device=self.device)
         self.body_quat_relative_w[:, :, 0] = 1.0
 
         # 自适应采样
-        self.bin_count = int(self.motion.time_step_total // (1 / (env.cfg.decimation * env.cfg.sim.dt))) + 1    # 根据控制频率(50HZ)将运动序列分段
-        self.bin_failed_count = torch.zeros(self.bin_count, dtype=torch.float, device=self.device)  # 记录了从训练开始到现在，所有机器人在第N个格子上摔倒了几次
-        self._current_bin_failed = torch.zeros(self.bin_count, dtype=torch.float, device=self.device)   # 只记录这一个step里有哪些机器人摔倒了，稍后会合进总账
+        self.bin_count = int(self.motion.time_step_total.max().float() // (1 / (env.cfg.decimation * env.cfg.sim.dt))) + 1
+        self.bin_failed_count = torch.zeros((self.motion.num_motions, self.bin_count), dtype=torch.float, device=self.device)  # 记录了从训练开始到现在，所有机器人在第N个格子上摔倒了几次
+        self._current_bin_failed = torch.zeros((self.motion.num_motions, self.bin_count), dtype=torch.float, device=self.device)   # 只记录这一个step里有哪些机器人摔倒了，稍后会合进总账
         # 这是一个衰减权重的卷积核
         # 因为机器人在第100帧摔倒了，但通常不是100帧的问题，而是99帧或者98帧的问题，所以不仅会给100帧标记1次失败，还会给99帧标记0.8次失败，这样权重衰减下去
         self.kernel = torch.tensor(
@@ -156,52 +128,57 @@ class MotionCommand(CommandTerm):
         self.metrics["sampling_entropy"] = torch.zeros(self.num_envs, device=self.device)
         self.metrics["sampling_top1_prob"] = torch.zeros(self.num_envs, device=self.device)
         self.metrics["sampling_top1_bin"] = torch.zeros(self.num_envs, device=self.device)
-        self.metrics["elastic"] = self.elastic.clone()
+        # self.metrics["elastic"] = self.elastic.clone()
 
     # @property装饰器， 使得可以像访问变量一样访问函数
+    @property
+    def _current_steps(self) -> torch.Tensor:
+        starts = self.motion.motion_starts[self.motion_ids]
+        return starts + self.time_steps
+
     @property
     def command(self) -> torch.Tensor:  # TODO Consider again if this is the best observation
         return torch.cat([self.joint_pos, self.joint_vel], dim=1)
 
     @property
     def joint_pos(self) -> torch.Tensor:
-        return self.current_sample['joint_pos']
+        return self.motion.joint_pos[self._current_steps]
 
     @property
     def joint_vel(self) -> torch.Tensor:
-        return self.current_sample['joint_vel']
+        return self.motion.joint_vel[self._current_steps]
 
     @property
     def body_pos_w(self) -> torch.Tensor:
-        return self.current_sample['body_pos_w'] + self._env.scene.env_origins[:, None, :]
+        return self.motion.body_pos_w[self._current_steps] + self._env.scene.env_origins[:, None, :]
 
     @property
     def body_quat_w(self) -> torch.Tensor:
-        return self.current_sample['body_quat_w']
+        return self.motion.body_quat_w[self._current_steps]
 
     @property
     def body_lin_vel_w(self) -> torch.Tensor:
-        return self.current_sample['body_lin_vel_w']
+        return self.motion.body_lin_vel_w[self._current_steps]
 
     @property
     def body_ang_vel_w(self) -> torch.Tensor:
-        return self.current_sample['body_ang_vel_w']
+        return self.motion.body_ang_vel_w[self._current_steps]
 
     @property
     def anchor_pos_w(self) -> torch.Tensor:
-        return self.current_sample['body_pos_w'][:, self.motion_anchor_body_index] + self._env.scene.env_origins
+        return self.motion.body_pos_w[self._current_steps, self.motion_anchor_body_index] + self._env.scene.env_origins
 
     @property
     def anchor_quat_w(self) -> torch.Tensor:
-        return self.current_sample['body_quat_w'][:, self.motion_anchor_body_index]
+        return self.motion.body_quat_w[self._current_steps, self.motion_anchor_body_index]
 
     @property
     def anchor_lin_vel_w(self) -> torch.Tensor:
-        return self.current_sample['body_lin_vel_w'][:, self.motion_anchor_body_index]
+        return self.motion.body_lin_vel_w[self._current_steps, self.motion_anchor_body_index]
 
     @property
     def anchor_ang_vel_w(self) -> torch.Tensor:
-        return self.current_sample['body_ang_vel_w'][:, self.motion_anchor_body_index]
+        return self.motion.body_ang_vel_w[self._current_steps, self.motion_anchor_body_index]
 
     @property
     def robot_joint_pos(self) -> torch.Tensor:
@@ -282,51 +259,57 @@ class MotionCommand(CommandTerm):
 
         self.metrics["error_joint_pos"] = torch.norm(self.joint_pos - self.robot_joint_pos, dim=-1)
         self.metrics["error_joint_vel"] = torch.norm(self.joint_vel - self.robot_joint_vel, dim=-1)
-        self.metrics["elastic"] = self.elastic.clone()
+        # self.metrics["elastic"] = self.elastic.clone()
 
     def _adaptive_sampling(self, env_ids: Sequence[int]):
         episode_failed = self._env.termination_manager.terminated[env_ids]  # 读取非超时而终结的环境
         if torch.any(episode_failed):
+            failed_env_ids = env_ids[episode_failed]
+            failed_motion_ids = self.motion_ids[failed_env_ids]
+            motion_lengths = self.motion.time_step_total[failed_motion_ids].float()
+            progress = self.time_steps[failed_env_ids] / motion_lengths
             # 算出当前是在第几个时间段(Bin)结束掉的
-            current_bin_index = torch.clamp(
-                (self.time_steps.long() * self.bin_count) // max(self.motion.time_step_total, 1), 0, self.bin_count - 1
+            fail_bin_indices = (progress * self.bin_count).long().clamp(0, self.bin_count - 1)
+            self._current_bin_failed.index_put_(
+                (failed_motion_ids, fail_bin_indices), 
+                torch.ones_like(failed_motion_ids, dtype=torch.float), 
+                accumulate=True
             )
-            fail_bins = current_bin_index[env_ids][episode_failed]  # 筛选出那些“真正失败”（不是超时)的环境对应的Bin
-            self._current_bin_failed[:] = torch.bincount(fail_bins, minlength=self.bin_count)   # 统计每个Bin的失败次数
 
         # Sample
-        sampling_probabilities = self.bin_failed_count + self.cfg.adaptive_uniform_ratio / float(self.bin_count)    # 基础概率 = 历史失败次数 + 一个很小的均匀底数 (防止有些地方一次都没失败过导致概率为0)
-        sampling_probabilities = torch.nn.functional.pad(
-            sampling_probabilities.unsqueeze(0).unsqueeze(0),
-            (0, self.cfg.adaptive_kernel_size - 1),  # Non-causal kernel
-            mode="replicate",
+        reset_motion_ids = self.motion_ids[env_ids]
+        sampling_probabilities = self.bin_failed_count[reset_motion_ids] + self.cfg.adaptive_uniform_ratio / float(self.bin_count)    # 基础概率 = 历史失败次数 + 一个很小的均匀底数 (防止有些地方一次都没失败过导致概率为0)
+        probs_padded = torch.nn.functional.pad(
+            sampling_probabilities.unsqueeze(1), 
+            (0, self.cfg.adaptive_kernel_size - 1), 
+            mode="replicate"
         )
-        sampling_probabilities = torch.nn.functional.conv1d(sampling_probabilities, self.kernel.view(1, 1, -1)).view(-1)
-
-        sampling_probabilities = sampling_probabilities / sampling_probabilities.sum()  # 归一化(让总和为1)
-
-        sampled_bins = torch.multinomial(sampling_probabilities, len(env_ids), replacement=True)    # 抽签：根据刚才算的概率分布，决定每个环境从哪个 Bin 开始
+        sampling_probabilities = torch.nn.functional.conv1d(
+            probs_padded, 
+            self.kernel.view(1, 1, -1)
+        ).squeeze(1)
+        sampling_probabilities = sampling_probabilities / sampling_probabilities.sum(dim=-1, keepdim=True)
+        sampled_bins = torch.multinomial(sampling_probabilities, 1).squeeze(-1)   # 抽签：根据刚才算的概率分布，决定每个环境从哪个 Bin 开始
 
         # 随机化从段中的具体哪个帧开始
         self.time_steps[env_ids] = (
             (sampled_bins + sample_uniform(0.0, 1.0, (len(env_ids),), device=self.device))
             / self.bin_count
-            * (self.motion.time_step_total - 1)
-        ).float()
+            * (self.motion.time_step_total[reset_motion_ids] - 1)
+        ).long()
 
         # Metrics
-        H = -(sampling_probabilities * (sampling_probabilities + 1e-12).log()).sum()    # 计算香农熵，用来描述混乱程度和不确定性。熵很高说明概率平坦，熵很低说明概率分布尖锐
+        H = -(sampling_probabilities * (sampling_probabilities + 1e-12).log()).sum(dim=1)    # 计算香农熵，用来描述混乱程度和不确定性。熵很高说明概率平坦，熵很低说明概率分布尖锐
         H_norm = H / math.log(self.bin_count)   # 归一化熵
-        pmax, imax = sampling_probabilities.max(dim=0)
-        self.metrics["sampling_entropy"][:] = H_norm
-        self.metrics["sampling_top1_prob"][:] = pmax
-        self.metrics["sampling_top1_bin"][:] = imax.float() / self.bin_count
+        pmax, imax = sampling_probabilities.max(dim=1)
+        self.metrics["sampling_entropy"][env_ids] = H_norm
+        self.metrics["sampling_top1_prob"][env_ids] = pmax
+        self.metrics["sampling_top1_bin"][env_ids] = imax.float() / self.bin_count
 
     def _resample_command(self, env_ids: Sequence[int]):
         if len(env_ids) == 0:
             return
         self._adaptive_sampling(env_ids)
-        self.current_sample = self.motion.sample(self.time_steps)
 
         root_pos = self.body_pos_w[:, 0].clone()
         root_ori = self.body_quat_w[:, 0].clone()
@@ -362,11 +345,8 @@ class MotionCommand(CommandTerm):
 
     def _update_command(self):
         self.time_steps += 1    # 这一帧结束了，进度条往前走一格
-        self.current_sample = self.motion.sample(self.time_steps)
-        env_ids = torch.where(self.time_steps >= self.motion.time_step_total)[0]    # 找到超时的环境
+        env_ids = torch.where(self.time_steps >= self.motion.time_step_total[self.motion_ids])[0]    # 找到超时的环境
         self._resample_command(env_ids)
-        similarity = self.calc_similarity(k=1.)
-        self.elastic = self.cfg.e_max - (self.cfg.e_max - self.cfg.e_min) * similarity
 
         anchor_pos_w_repeat = self.anchor_pos_w[:, None, :].repeat(1, len(self.cfg.body_names), 1)
         anchor_quat_w_repeat = self.anchor_quat_w[:, None, :].repeat(1, len(self.cfg.body_names), 1)
