@@ -130,8 +130,6 @@ class ObservationsCfg:
         joint_vel = ObsTerm(func=mdp.joint_vel_rel, noise=Unoise(n_min=-0.5, n_max=0.5))
         actions = ObsTerm(func=mdp.last_action)
         
-        # elastic = ObsTerm(func=mdp.elastic, params={"command_name": "motion"})
-
         def __post_init__(self):
             self.enable_corruption = True
             self.concatenate_terms = True
@@ -149,12 +147,16 @@ class ObservationsCfg:
         joint_vel = ObsTerm(func=mdp.joint_vel_rel)
         actions = ObsTerm(func=mdp.last_action)
 
-        # elastic = ObsTerm(func=mdp.elastic, params={"command_name": "motion"})
+    @configclass
+    class ElasticCfg(ObsGroup):
+        command = ObsTerm(func=mdp.generated_commands, params={"command_name": "motion"})
+        motion_anchor_ori_w = ObsTerm(func=mdp.motion_anchor_ori_w, params={"command_name": "motion"})
+        motion_anchor_pos_w_height = ObsTerm(func=mdp.motion_anchor_pos_w_height, params={"command_name": "motion"})
 
     # observation groups
     policy: PolicyCfg = PolicyCfg()
     critic: CriticCfg = CriticCfg()
-
+    elastic: ElasticCfg = ElasticCfg()
 
 @configclass
 class EventCfg:

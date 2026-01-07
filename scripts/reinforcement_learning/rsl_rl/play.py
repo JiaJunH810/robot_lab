@@ -65,6 +65,8 @@ import time
 import torch
 
 from rsl_rl.runners import DistillationRunner, OnPolicyRunner
+from rsl_rl_elastic.runners import OnPolicyRunnerElastic
+
 
 from isaaclab.devices import Se2Keyboard, Se2KeyboardCfg
 from isaaclab.envs import (
@@ -83,7 +85,7 @@ from isaaclab_tasks.utils import get_checkpoint_path
 from isaaclab_tasks.utils.hydra import hydra_task_config
 
 import robot_lab.tasks  # noqa: F401
-
+from robot_lab.utils.exporter import attach_onnx_metadata
 
 @hydra_task_config(args_cli.task, args_cli.agent)
 def main(env_cfg: ManagerBasedRLEnvCfg | DirectRLEnvCfg | DirectMARLEnvCfg, agent_cfg: RslRlBaseRunnerCfg):
@@ -175,6 +177,8 @@ def main(env_cfg: ManagerBasedRLEnvCfg | DirectRLEnvCfg | DirectMARLEnvCfg, agen
     # load previously trained model
     if agent_cfg.class_name == "OnPolicyRunner":
         runner = OnPolicyRunner(env, agent_cfg.to_dict(), log_dir=None, device=agent_cfg.device)
+    elif agent_cfg.class_name == "OnPolicyRunnerElastic":
+        runner = OnPolicyRunnerElastic(env, agent_cfg.to_dict(), log_dir=log_dir, device=agent_cfg.device)
     elif agent_cfg.class_name == "DistillationRunner":
         runner = DistillationRunner(env, agent_cfg.to_dict(), log_dir=None, device=agent_cfg.device)
     else:
@@ -205,6 +209,7 @@ def main(env_cfg: ManagerBasedRLEnvCfg | DirectRLEnvCfg | DirectMARLEnvCfg, agen
     export_model_dir = os.path.join(os.path.dirname(resume_path), "exported")
     export_policy_as_jit(policy_nn, normalizer=normalizer, path=export_model_dir, filename="policy.pt")
     export_policy_as_onnx(policy_nn, normalizer=normalizer, path=export_model_dir, filename="policy.onnx")
+    attach_onnx_metadata(env.unwrapped, export_model_dir)
 
     dt = env.unwrapped.step_dt
 

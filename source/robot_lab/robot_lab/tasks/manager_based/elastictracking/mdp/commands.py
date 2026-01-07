@@ -128,7 +128,6 @@ class MotionCommand(CommandTerm):
         self.metrics["sampling_entropy"] = torch.zeros(self.num_envs, device=self.device)
         self.metrics["sampling_top1_prob"] = torch.zeros(self.num_envs, device=self.device)
         self.metrics["sampling_top1_bin"] = torch.zeros(self.num_envs, device=self.device)
-        # self.metrics["elastic"] = self.elastic.clone()
 
     # @property装饰器， 使得可以像访问变量一样访问函数
     @property
@@ -220,22 +219,27 @@ class MotionCommand(CommandTerm):
     def robot_anchor_ang_vel_w(self) -> torch.Tensor:
         return self.robot.data.body_ang_vel_w[:, self.robot_anchor_body_index]
     
-    def calc_similarity(self, k) -> torch.Tensor:
-        error_body_ang_vel = torch.norm(self.body_ang_vel_w - self.robot_body_ang_vel_w, dim=-1).mean(dim=-1)
+    def calc_elastic_groud_truth(self) -> torch.Tensor:
+        error_anchor_body_ang_vel = torch.norm(self.anchor_ang_vel_w - self.robot_anchor_ang_vel_w, dim=-1)
         error_body_pos = torch.norm(self.body_pos_relative_w - self.robot_body_pos_w, dim=-1).mean(dim=-1)
-        error_body_rot = quat_error_magnitude(self.body_quat_relative_w, self.robot_body_quat_w).mean(dim=-1)
+        error_anchor_body_quat = quat_error_magnitude(self.anchor_quat_w, self.robot_anchor_quat_w)
         error_joint_pos = torch.norm(self.joint_pos - self.robot_joint_pos, dim=-1)
         error_joint_vel = torch.norm(self.joint_vel - self.robot_joint_vel, dim=-1)
 
-        error_body_ang_vel_norm = error_body_ang_vel / 8.0
-        error_body_pos_norm = error_body_pos / 0.3
-        error_body_rot_norm = error_body_rot / 0.8
-        error_joint_pos_norm =  error_joint_pos / 3.0
-        error_joint_vel_norm = error_joint_vel / 30.0
+        error_anchor_body_ang_vel = error_anchor_body_ang_vel / 8.0
+        error_body_pos = error_body_pos / 0.3
+        error_anchor_body_quat = error_anchor_body_quat / 0.8
+        error_joint_pos =  error_joint_pos / 3.0
+        error_joint_vel = error_joint_vel / 30.0
 
-        similarity = error_body_ang_vel_norm * 0.1 + error_body_pos_norm * 0.1 + error_body_rot_norm * 0.2 + error_joint_pos_norm * 0.5 + error_joint_vel_norm * 0.1
-        similarity = torch.exp(-similarity * k)
-        return similarity
+        self.elastic_gt = torch.stack([
+            error_anchor_body_ang_vel,
+            error_body_pos,
+            error_anchor_body_quat,
+            error_joint_pos,
+            error_joint_vel
+        ], dim=1)
+
 
     def _update_metrics(self):  # 计算与参考动作的误差
         self.metrics["error_anchor_pos"] = torch.norm(self.anchor_pos_w - self.robot_anchor_pos_w, dim=-1)
@@ -259,7 +263,6 @@ class MotionCommand(CommandTerm):
 
         self.metrics["error_joint_pos"] = torch.norm(self.joint_pos - self.robot_joint_pos, dim=-1)
         self.metrics["error_joint_vel"] = torch.norm(self.joint_vel - self.robot_joint_vel, dim=-1)
-        # self.metrics["elastic"] = self.elastic.clone()
 
     def _adaptive_sampling(self, env_ids: Sequence[int]):
         episode_failed = self._env.termination_manager.terminated[env_ids]  # 读取非超时而终结的环境
@@ -344,6 +347,7 @@ class MotionCommand(CommandTerm):
         )
 
     def _update_command(self):
+        self.calc_elastic_groud_truth()
         self.time_steps += 1    # 这一帧结束了，进度条往前走一格
         env_ids = torch.where(self.time_steps >= self.motion.time_step_total[self.motion_ids])[0]    # 找到超时的环境
         self._resample_command(env_ids)
