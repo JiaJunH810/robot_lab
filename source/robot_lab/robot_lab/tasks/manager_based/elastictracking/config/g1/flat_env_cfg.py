@@ -40,3 +40,6 @@ class UnitreeG1BeyondMimicFlatEnvCfg(BeyondMimicEnvCfg):
         self.observations.policy.base_lin_vel = None
 
         self.episode_length_s = 30.0
+
+        self.commands.motion.enable_stg = False
+        self.commands.motion.stg_ratio = 0.01

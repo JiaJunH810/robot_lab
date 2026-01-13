@@ -16,7 +16,7 @@ class UnitreeG1BeyondMimicFlatEnvCfg(BeyondMimicEnvCfg):
         # MISSING 的地方在这里赋值了
         self.scene.robot = UNITREE_G1_23DOF_CFG.replace(prim_path="{ENV_REGEX_NS}/Robot")
         self.actions.joint_pos.scale = UNITREE_G1_23DOF_ACTION_SCALE
-        self.commands.motion.motion_file = f"{os.path.dirname(__file__)}/motion/G1_1waist_Walk_Run.npz"   # 加载运动序列
+        self.commands.motion.motion_file = f"{os.path.dirname(__file__)}/motion/A2_-_Sway_stageii.npz"   # 加载运动序列
         self.commands.motion.anchor_body_name = "torso_link"
         self.commands.motion.body_names = [
             "pelvis",

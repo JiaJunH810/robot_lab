@@ -144,11 +144,10 @@ class PPOElastic:
     def act_elastic(self, obs: TensorDict) -> torch.Tensor:
         return self.elastic(obs)
     
-    elastic_loss = torch.nn.HuberLoss(delta=1.0)
     def update_elastic(self, obs, gt):
         pred = self.act_elastic(obs)
         target = gt.detach().view_as(pred)
-        loss = self.elastic_loss(pred, target)
+        loss = self.elastic.compute_loss(pred, target)
         self.optimizer_elastic.zero_grad()
         loss.backward()
         self.optimizer_elastic.step()

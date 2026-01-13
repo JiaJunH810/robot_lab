@@ -387,8 +387,8 @@ def main():
     else:
         motions = glob.glob(f'{args_cli.input_file}/*.pkl', recursive=False)
     for motion in tqdm(motions):
-        basename = os.path.basename(motion)
-        args_cli.output_name = os.path.join(os.path.dirname(os.path.dirname(motion)), f"motions_npz/{basename}")
+        basename = os.path.basename(motion).split('.')[0]
+        args_cli.output_name = os.path.join(os.path.dirname(os.path.dirname(motion)), f"motions_npz/{basename}.npz")
         run_simulator(motion, sim, scene)
 
 

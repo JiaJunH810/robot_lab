@@ -11,6 +11,7 @@ from collections.abc import Sequence
 from dataclasses import MISSING
 from typing import TYPE_CHECKING
 import glob
+import random
 
 from isaaclab.assets import Articulation
 from isaaclab.managers import CommandTerm, CommandTermCfg
@@ -34,10 +35,10 @@ if TYPE_CHECKING:
 class MotionLoader:
     def __init__(self, motion_file: str, body_indexes: Sequence[int], device: str = "cpu"):
         if os.path.isfile(motion_file):
-            files = glob.glob(motion_file)
+            self.files = glob.glob(motion_file)
         else:
-            files = glob.glob(f"{motion_file}/*.npz")
-        assert len(files) != 0, f"Invalid file path: {motion_file}"
+            self.files = glob.glob(f"{motion_file}/*.npz")
+        assert len(self.files) != 0, f"Invalid file path: {motion_file}"
 
         self.time_step_total = []
         self.joint_pos = []
@@ -46,9 +47,9 @@ class MotionLoader:
         self._body_quat_w = []
         self._body_lin_vel_w = []
         self._body_ang_vel_w = []
-        self.num_motions = len(files)
+        self.num_motions = len(self.files)
 
-        for motion_file in files:
+        for motion_file in self.files:
             data = np.load(motion_file)
             self.fps = data['fps']
             self.joint_pos.append(torch.tensor(data["joint_pos"], dtype=torch.float32, device=device))
@@ -129,11 +130,18 @@ class MotionCommand(CommandTerm):
         self.metrics["sampling_top1_prob"] = torch.zeros(self.num_envs, device=self.device)
         self.metrics["sampling_top1_bin"] = torch.zeros(self.num_envs, device=self.device)
 
+        self.elastic_pred: torch.Tensor | None = None
+        self.elastic_gt: torch.Tensor | None = None
+        self.elastic_frames = torch.zeros(self.num_envs, dtype=torch.long, device=self.device)
+        self.root_pos_offset = torch.zeros(self.num_envs, 3, device=self.device)
+        self.has_jumped = torch.zeros(self.num_envs, dtype=torch.bool, device=self.device)
+
     # @property装饰器， 使得可以像访问变量一样访问函数
     @property
     def _current_steps(self) -> torch.Tensor:
         starts = self.motion.motion_starts[self.motion_ids]
-        return starts + self.time_steps
+        safe_steps = torch.minimum(self.time_steps, self.motion.time_step_total[self.motion_ids] - 1)
+        return starts + safe_steps
 
     @property
     def command(self) -> torch.Tensor:  # TODO Consider again if this is the best observation
@@ -149,7 +157,7 @@ class MotionCommand(CommandTerm):
 
     @property
     def body_pos_w(self) -> torch.Tensor:
-        return self.motion.body_pos_w[self._current_steps] + self._env.scene.env_origins[:, None, :]
+        return self.motion.body_pos_w[self._current_steps] + self._env.scene.env_origins[:, None, :] + self.root_pos_offset[:, None, :]
 
     @property
     def body_quat_w(self) -> torch.Tensor:
@@ -165,7 +173,11 @@ class MotionCommand(CommandTerm):
 
     @property
     def anchor_pos_w(self) -> torch.Tensor:
-        return self.motion.body_pos_w[self._current_steps, self.motion_anchor_body_index] + self._env.scene.env_origins
+        return self.motion.body_pos_w[self._current_steps, self.motion_anchor_body_index] + self._env.scene.env_origins + self.root_pos_offset
+    
+    @property
+    def anchor_pos_raw_w(self) -> torch.Tensor:
+        return self.motion.body_pos_w[self._current_steps, self.motion_anchor_body_index]
 
     @property
     def anchor_quat_w(self) -> torch.Tensor:
@@ -219,7 +231,7 @@ class MotionCommand(CommandTerm):
     def robot_anchor_ang_vel_w(self) -> torch.Tensor:
         return self.robot.data.body_ang_vel_w[:, self.robot_anchor_body_index]
     
-    def calc_elastic_groud_truth(self) -> torch.Tensor:
+    def calc_elastic_groud_truth(self):
         error_anchor_body_ang_vel = torch.norm(self.anchor_ang_vel_w - self.robot_anchor_ang_vel_w, dim=-1)
         error_body_pos = torch.norm(self.body_pos_relative_w - self.robot_body_pos_w, dim=-1).mean(dim=-1)
         error_anchor_body_quat = quat_error_magnitude(self.anchor_quat_w, self.robot_anchor_quat_w)
@@ -239,7 +251,7 @@ class MotionCommand(CommandTerm):
             error_joint_pos,
             error_joint_vel
         ], dim=1)
-
+        return self.elastic_gt
 
     def _update_metrics(self):  # 计算与参考动作的误差
         self.metrics["error_anchor_pos"] = torch.norm(self.anchor_pos_w - self.robot_anchor_pos_w, dim=-1)
@@ -278,8 +290,18 @@ class MotionCommand(CommandTerm):
                 torch.ones_like(failed_motion_ids, dtype=torch.float), 
                 accumulate=True
             )
+        
+        # Sample Motion
+        motion_failed = self.bin_failed_count.sum(dim=1)
+        motion_sampling_probs = torch.sqrt(motion_failed) + self.cfg.adaptive_uniform_ratio
+        motion_sampling_probs = motion_sampling_probs / motion_sampling_probs.sum()
+        self.motion_ids[env_ids] = torch.multinomial(
+            motion_sampling_probs, 
+            num_samples=len(env_ids), 
+            replacement=True
+        )
 
-        # Sample
+        # Sample Bin
         reset_motion_ids = self.motion_ids[env_ids]
         sampling_probabilities = self.bin_failed_count[reset_motion_ids] + self.cfg.adaptive_uniform_ratio / float(self.bin_count)    # 基础概率 = 历史失败次数 + 一个很小的均匀底数 (防止有些地方一次都没失败过导致概率为0)
         probs_padded = torch.nn.functional.pad(
@@ -308,10 +330,65 @@ class MotionCommand(CommandTerm):
         self.metrics["sampling_entropy"][env_ids] = H_norm
         self.metrics["sampling_top1_prob"][env_ids] = pmax
         self.metrics["sampling_top1_bin"][env_ids] = imax.float() / self.bin_count
+    
+    def calc_robot_similarity(self, env_ids_jump, target_indices):
+        robot_dof_pos = self.robot_joint_pos[env_ids_jump]
+        robot_anchor_quat_w = self.robot_anchor_quat_w[env_ids_jump]
+        robot_anchor_ang_vel_w = self.robot_anchor_ang_vel_w[env_ids_jump]
+
+        motion_dof_pos = self.motion.joint_pos[target_indices]
+        motion_anchor_quat_w = self.motion.body_quat_w[target_indices, self.motion_anchor_body_index]
+        motion_anchor_ang_vel_w = self.motion.body_ang_vel_w[target_indices, self.motion_anchor_body_index]
+
+        r_dof_pos = torch.exp(-torch.sum(torch.square(robot_dof_pos - motion_dof_pos), dim=-1))
+        r_anchor_quat_w = torch.exp(-(quat_error_magnitude(motion_anchor_quat_w, robot_anchor_quat_w)** 2) / 0.4**2)
+        r_anchor_ang_vel_w = torch.exp(-torch.sum(torch.square(robot_anchor_ang_vel_w - motion_anchor_ang_vel_w), dim=-1) / 3.14**2)
+        beta = r_dof_pos * r_anchor_quat_w * r_anchor_ang_vel_w
+        return beta
+
+    def update_timesteps(self,):
+        mask_active = self.elastic_frames > 0
+        env_ids_mask = torch.nonzero(mask_active).squeeze(-1)
+        env_ids_free = torch.nonzero(~mask_active).squeeze(-1)
+
+        if len(env_ids_mask) > 0:
+            self.elastic_frames[env_ids_mask] -= 1
+
+        if len(env_ids_free) == 0:
+            return 
+
+        if not self.cfg.enable_stg:
+            self.time_steps[env_ids_free] += 1
+        else:
+            jump_mask = (torch.rand(len(env_ids_free), device=self.device) < self.cfg.stg_ratio) & (~self.has_jumped[env_ids_free])
+            relative_ids_jump = torch.nonzero(jump_mask).squeeze(-1)
+            relative_ids_step = torch.nonzero(~jump_mask).squeeze(-1)
+            env_ids_jump = env_ids_free[relative_ids_jump]
+            env_ids_step = env_ids_free[relative_ids_step]
+
+            if len(env_ids_step) > 0:
+                self.time_steps[env_ids_step] += 1
+            
+            if len(env_ids_jump) > 0:
+                target_motion_ids = torch.randint(0, self.motion.num_motions, (len(env_ids_jump),), device=self.device)
+                target_motion_lengths = self.motion.time_step_total[target_motion_ids]
+                target_local_indices = (torch.rand(len(env_ids_jump), device=self.device) * target_motion_lengths * 0.5).long()
+                target_absolute_indices = self.motion.motion_starts[target_motion_ids] + target_local_indices
+
+                beta = self.calc_robot_similarity(env_ids_jump, target_absolute_indices)
+                log_beta = torch.log10(beta + 1e-6)
+                
+                self.motion_ids[env_ids_jump] = target_motion_ids
+                self.time_steps[env_ids_jump] = target_local_indices
+                self.root_pos_offset[env_ids_jump, :2] = self.robot_anchor_pos_w[env_ids_jump, :2] - (self.anchor_pos_raw_w[env_ids_jump, :2] + self._env.scene.env_origins[env_ids_jump, :2])
+                self.elastic_frames[env_ids_jump] = torch.floor(-log_beta).long()
+                self.has_jumped[env_ids_jump] = True
 
     def _resample_command(self, env_ids: Sequence[int]):
         if len(env_ids) == 0:
             return
+        self.root_pos_offset[env_ids] = 0.
+        self.has_jumped[env_ids] = False
         self._adaptive_sampling(env_ids)
 
         root_pos = self.body_pos_w[:, 0].clone()
@@ -347,8 +424,9 @@ class MotionCommand(CommandTerm):
         )
 
     def _update_command(self):
-        self.calc_elastic_groud_truth()
-        self.time_steps += 1    # 这一帧结束了，进度条往前走一格
+        # self.time_steps += 1    # 这一帧结束了，进度条往前走一格
+        self.update_timesteps()
+
         env_ids = torch.where(self.time_steps >= self.motion.time_step_total[self.motion_ids])[0]    # 找到超时的环境
         self._resample_command(env_ids)
 
@@ -453,4 +531,4 @@ class MotionCommandCfg(CommandTermCfg):
     body_visualizer_cfg: VisualizationMarkersCfg = FRAME_MARKER_CFG.replace(prim_path="/Visuals/Command/pose")
     body_visualizer_cfg.markers["frame"].scale = (0.1, 0.1, 0.1)
 
-    e_min, e_max = 1, 3
+    enable_stg: bool = MISSING

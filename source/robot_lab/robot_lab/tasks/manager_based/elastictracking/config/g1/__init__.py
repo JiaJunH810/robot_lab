@@ -11,7 +11,8 @@ from . import agents, flat_env_cfg
 
 gym.register(
     id="RobotLab-Isaac-ElasticTracking-Flat-Unitree-G1-v0",
-    entry_point="isaaclab.envs:ManagerBasedRLEnv",
+    # entry_point="isaaclab.envs:ManagerBasedRLEnv",
+    entry_point="robot_lab.envs:ElasticG1Env",
     disable_env_checker=True,   # 关闭安检
     kwargs={
         "env_cfg_entry_point": f"{__name__}.flat_env_cfg:UnitreeG1BeyondMimicFlatEnvCfg",

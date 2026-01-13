@@ -89,7 +89,11 @@ class OnPolicyRunnerElastic:
                 for _ in range(self.cfg["num_steps_per_env"]):
                     # Sample actions
                     actions = self.alg.act(obs)
+                    
                     elastic_obs = self.alg.elastic.get_elastic_obs(obs=obs)
+                    elastic_pred = self.alg.elastic(elastic_obs)
+                    self.env.unwrapped.command_manager._terms["motion"].elastic_pred = elastic_pred
+
                     # Step the environment
                     obs, rewards, dones, extras = self.env.step(actions.to(self.env.device))
                     # update elastic
