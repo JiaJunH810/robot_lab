@@ -11,11 +11,12 @@ import torch.optim as optim
 from itertools import chain
 from tensordict import TensorDict
 
-from rsl_rl.modules import ActorCritic, ActorCriticCNN, ActorCriticRecurrent
+from rsl_rl.modules import ActorCritic, ActorCriticRecurrent
 from rsl_rl.modules.rnd import RandomNetworkDistillation
-from rsl_rl_elastic.storage import RolloutStorage
+from rsl_rl_elastic.storage import RolloutStorageElastic
 from rsl_rl.utils import string_to_callable
 from rsl_rl_elastic.modules import Elastic
+from rsl_rl_elastic.modules import ActorCriticCNN
 
 class PPOElastic:
     """Proximal Policy Optimization algorithm (https://arxiv.org/abs/1707.06347)."""
@@ -27,7 +28,7 @@ class PPOElastic:
         self,
         policy: ActorCritic | ActorCriticRecurrent | ActorCriticCNN,
         elastic: Elastic,
-        storage: RolloutStorage,
+        storage: RolloutStorageElastic,
         num_learning_epochs: int = 5,
         num_mini_batches: int = 4,
         clip_param: float = 0.2,
@@ -111,7 +112,7 @@ class PPOElastic:
 
         # Add storage
         self.storage = storage
-        self.transition = RolloutStorage.Transition()
+        self.transition = RolloutStorageElastic.Transition()
 
         # PPO parameters
         self.clip_param = clip_param

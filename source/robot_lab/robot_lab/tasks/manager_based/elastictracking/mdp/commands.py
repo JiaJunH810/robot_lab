@@ -37,7 +37,7 @@ class MotionLoader:
         if os.path.isfile(motion_file):
             self.files = glob.glob(motion_file)
         else:
-            self.files = glob.glob(f"{motion_file}/*.npz")
+            self.files = glob.glob(f"{motion_file}/**/*.npz", recursive=True)
         assert len(self.files) != 0, f"Invalid file path: {motion_file}"
 
         self.time_step_total = []
@@ -132,9 +132,6 @@ class MotionCommand(CommandTerm):
 
         self.elastic_pred: torch.Tensor | None = None
         self.elastic_gt: torch.Tensor | None = None
-        self.elastic_frames = torch.zeros(self.num_envs, dtype=torch.long, device=self.device)
-        self.root_pos_offset = torch.zeros(self.num_envs, 3, device=self.device)
-        self.has_jumped = torch.zeros(self.num_envs, dtype=torch.bool, device=self.device)
 
     # @property装饰器， 使得可以像访问变量一样访问函数
     @property
@@ -157,7 +154,7 @@ class MotionCommand(CommandTerm):
 
     @property
     def body_pos_w(self) -> torch.Tensor:
-        return self.motion.body_pos_w[self._current_steps] + self._env.scene.env_origins[:, None, :] + self.root_pos_offset[:, None, :]
+        return self.motion.body_pos_w[self._current_steps] + self._env.scene.env_origins[:, None, :]
 
     @property
     def body_quat_w(self) -> torch.Tensor:
@@ -173,11 +170,7 @@ class MotionCommand(CommandTerm):
 
     @property
     def anchor_pos_w(self) -> torch.Tensor:
-        return self.motion.body_pos_w[self._current_steps, self.motion_anchor_body_index] + self._env.scene.env_origins + self.root_pos_offset
-    
-    @property
-    def anchor_pos_raw_w(self) -> torch.Tensor:
-        return self.motion.body_pos_w[self._current_steps, self.motion_anchor_body_index]
+        return self.motion.body_pos_w[self._current_steps, self.motion_anchor_body_index] + self._env.scene.env_origins
 
     @property
     def anchor_quat_w(self) -> torch.Tensor:
@@ -330,65 +323,10 @@ class MotionCommand(CommandTerm):
         self.metrics["sampling_entropy"][env_ids] = H_norm
         self.metrics["sampling_top1_prob"][env_ids] = pmax
         self.metrics["sampling_top1_bin"][env_ids] = imax.float() / self.bin_count
-    
-    def calc_robot_similarity(self, env_ids_jump, target_indices):
-        robot_dof_pos = self.robot_joint_pos[env_ids_jump]
-        robot_anchor_quat_w = self.robot_anchor_quat_w[env_ids_jump]
-        robot_anchor_ang_vel_w = self.robot_anchor_ang_vel_w[env_ids_jump]
-
-        motion_dof_pos = self.motion.joint_pos[target_indices]
-        motion_anchor_quat_w = self.motion.body_quat_w[target_indices, self.motion_anchor_body_index]
-        motion_anchor_ang_vel_w = self.motion.body_ang_vel_w[target_indices, self.motion_anchor_body_index]
-
-        r_dof_pos = torch.exp(-torch.sum(torch.square(robot_dof_pos - motion_dof_pos), dim=-1))
-        r_anchor_quat_w = torch.exp(-(quat_error_magnitude(motion_anchor_quat_w, robot_anchor_quat_w)** 2) / 0.4**2)
-        r_anchor_ang_vel_w = torch.exp(-torch.sum(torch.square(robot_anchor_ang_vel_w - motion_anchor_ang_vel_w), dim=-1) / 3.14**2)
-        beta = r_dof_pos * r_anchor_quat_w * r_anchor_ang_vel_w
-        return beta
-
-    def update_timesteps(self,):
-        mask_active = self.elastic_frames > 0
-        env_ids_mask = torch.nonzero(mask_active).squeeze(-1)
-        env_ids_free = torch.nonzero(~mask_active).squeeze(-1)
-
-        if len(env_ids_mask) > 0:
-            self.elastic_frames[env_ids_mask] -= 1
-
-        if len(env_ids_free) == 0:
-            return 
-
-        if not self.cfg.enable_stg:
-            self.time_steps[env_ids_free] += 1
-        else:
-            jump_mask = (torch.rand(len(env_ids_free), device=self.device) < self.cfg.stg_ratio) & (~self.has_jumped[env_ids_free])
-            relative_ids_jump = torch.nonzero(jump_mask).squeeze(-1)
-            relative_ids_step = torch.nonzero(~jump_mask).squeeze(-1)
-            env_ids_jump = env_ids_free[relative_ids_jump]
-            env_ids_step = env_ids_free[relative_ids_step]
-
-            if len(env_ids_step) > 0:
-                self.time_steps[env_ids_step] += 1
-            
-            if len(env_ids_jump) > 0:
-                target_motion_ids = torch.randint(0, self.motion.num_motions, (len(env_ids_jump),), device=self.device)
-                target_motion_lengths = self.motion.time_step_total[target_motion_ids]
-                target_local_indices = (torch.rand(len(env_ids_jump), device=self.device) * target_motion_lengths * 0.5).long()
-                target_absolute_indices = self.motion.motion_starts[target_motion_ids] + target_local_indices
-
-                beta = self.calc_robot_similarity(env_ids_jump, target_absolute_indices)
-                log_beta = torch.log10(beta + 1e-6)
-                
-                self.motion_ids[env_ids_jump] = target_motion_ids
-                self.time_steps[env_ids_jump] = target_local_indices
-                self.root_pos_offset[env_ids_jump, :2] = self.robot_anchor_pos_w[env_ids_jump, :2] - (self.anchor_pos_raw_w[env_ids_jump, :2] + self._env.scene.env_origins[env_ids_jump, :2])
-                self.elastic_frames[env_ids_jump] = torch.floor(-log_beta).long()
-                self.has_jumped[env_ids_jump] = True
 
     def _resample_command(self, env_ids: Sequence[int]):
         if len(env_ids) == 0:
             return
-        self.root_pos_offset[env_ids] = 0.
-        self.has_jumped[env_ids] = False
         self._adaptive_sampling(env_ids)
 
         root_pos = self.body_pos_w[:, 0].clone()
@@ -424,8 +362,7 @@ class MotionCommand(CommandTerm):
         )
 
     def _update_command(self):
-        # self.time_steps += 1    # 这一帧结束了，进度条往前走一格
-        self.update_timesteps()
+        self.time_steps += 1    # 这一帧结束了，进度条往前走一格
 
         env_ids = torch.where(self.time_steps >= self.motion.time_step_total[self.motion_ids])[0]    # 找到超时的环境
         self._resample_command(env_ids)
@@ -521,7 +458,7 @@ class MotionCommandCfg(CommandTermCfg):
     joint_position_range: tuple[float, float] = (-0.52, 0.52)
 
     adaptive_kernel_size: int = 1
-    adaptive_lambda: float = 0.8
+    adaptive_lambda: float = 0.05
     adaptive_uniform_ratio: float = 0.1
     adaptive_alpha: float = 0.001
 
@@ -530,5 +467,3 @@ class MotionCommandCfg(CommandTermCfg):
 
     body_visualizer_cfg: VisualizationMarkersCfg = FRAME_MARKER_CFG.replace(prim_path="/Visuals/Command/pose")
     body_visualizer_cfg.markers["frame"].scale = (0.1, 0.1, 0.1)
-
-    enable_stg: bool = MISSING

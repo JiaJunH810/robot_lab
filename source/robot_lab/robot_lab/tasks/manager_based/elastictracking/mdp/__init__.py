@@ -6,7 +6,7 @@
 # 这里直接调用了isaaclab中的mdp,他自带一些奖励函数等其他东西
 from isaaclab.envs.mdp import *  # noqa: F401, F403
 
-from robot_lab.tasks.manager_based.beyondmimic.mdp import *  # noqa: F401, F403
+from robot_lab.tasks.manager_based.elastictracking.mdp import *  # noqa: F401, F403
 
 from .commands import *  # noqa: F401, F403
 from .events import *  # noqa: F401, F403

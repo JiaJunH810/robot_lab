@@ -218,11 +218,12 @@ class RobotLabSim2Sim:
 
     def run(self):
         sim_duration = 60.0
-        sim_dt = 0.005
-        sim_decimation = 4
+        sim_dt = 0.002
+        sim_decimation = 10
         timestep = 0
         anchor_name = "pelvis"
         action_buffer = np.zeros((self.num_action, ), dtype=np.float32)
+        print(f"帧数: {self.motion_joint_pos.shape[0]}")
 
         # 初始化状态
         self.d.qpos[-self.num_action:] = self.motion_joint_pos[0, self.lab_to_xml]
@@ -275,8 +276,9 @@ class RobotLabSim2Sim:
 if __name__ == "__main__":
     # 路径配置
     xml_path = "/home/ubuntu/projects/RoboJuDo/assets/robots/g1/g1_23dof_rev_1_0.xml"
-    motion_file = "/home/ubuntu/projects/hjj-robot_lab/source/robot_lab/robot_lab/tasks/manager_based/elastictracking/config/g1/motion/motions_npz/gvhmr_single_stand.npz"
-    policy_path = "/home/ubuntu/projects/hjj-robot_lab/logs/rsl_rl/unitree_g1_elastictracking_flat/2026-01-09_16-16-09/exported/policy.onnx"
+    motion_file = "/home/ubuntu/projects/hjj-robot_lab/source/motion/motions_npz/dance/103_03_stageii.npz"
+    # policy_path = "/home/ubuntu/projects/hjj-robot_lab/logs/rsl_rl/unitree_g1_elastictracking_flat/2026-01-09_16-16-09/exported/policy.onnx"
+    policy_path = "/home/ubuntu/projects/hjj-robot_lab/logs/rsl_rl/unitree_g1_elastictracking_flat/2026-01-20_19-25-27/exported/policy.onnx"
     
     r = RobotLabSim2Sim(xml_path, motion_file, policy_path)
     r.run()

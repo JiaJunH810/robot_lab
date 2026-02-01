@@ -333,21 +333,21 @@ def run_simulator(motion_file, sim: sim_utils.SimulationContext, scene: Interact
             log["body_ang_vel_w"].append(robot.data.body_ang_vel_w[0, :].cpu().numpy().copy())
 
         # 获取连杆相对位置
-        root_states = robot.data.default_root_state.clone()
-        root_states[:, :3] = torch.zeros_like(motion_base_pos)
-        root_states[:, 3:7] = motion_base_rot
-        root_states[:, 7:10] = motion_base_lin_vel
-        root_states[:, 10:] = motion_base_ang_vel
-        robot.write_root_state_to_sim(root_states)
-        joint_pos = robot.data.default_joint_pos.clone()
-        joint_vel = robot.data.default_joint_vel.clone()
-        joint_pos[:, robot_joint_indexes] = motion_dof_pos
-        joint_vel[:, robot_joint_indexes] = motion_dof_vel
-        robot.write_joint_state_to_sim(joint_pos, joint_vel)
-        sim.render()
-        scene.update(sim.get_physics_dt())
-        if not file_saved:
-            log["body_pos_r"].append(robot.data.body_pos_w[0, :].cpu().numpy().copy())
+        # root_states = robot.data.default_root_state.clone()
+        # root_states[:, :3] = torch.zeros_like(motion_base_pos)
+        # root_states[:, 3:7] = motion_base_rot
+        # root_states[:, 7:10] = motion_base_lin_vel
+        # root_states[:, 10:] = motion_base_ang_vel
+        # robot.write_root_state_to_sim(root_states)
+        # joint_pos = robot.data.default_joint_pos.clone()
+        # joint_vel = robot.data.default_joint_vel.clone()
+        # joint_pos[:, robot_joint_indexes] = motion_dof_pos
+        # joint_vel[:, robot_joint_indexes] = motion_dof_vel
+        # robot.write_joint_state_to_sim(joint_pos, joint_vel)
+        # sim.render()
+        # scene.update(sim.get_physics_dt())
+        # if not file_saved:
+        #     log["body_pos_r"].append(robot.data.body_pos_w[0, :].cpu().numpy().copy())
 
         if reset_flag and not file_saved:
             file_saved = True
@@ -358,7 +358,7 @@ def run_simulator(motion_file, sim: sim_utils.SimulationContext, scene: Interact
                 "body_quat_w",
                 "body_lin_vel_w",
                 "body_ang_vel_w",
-                "body_pos_r",
+                # "body_pos_r",
             ):
                 log[k] = np.stack(log[k], axis=0)
 
@@ -385,13 +385,19 @@ def main():
     if os.path.isfile(args_cli.input_file):
         motions = [args_cli.input_file]
     else:
-        motions = glob.glob(f'{args_cli.input_file}/*.pkl', recursive=False)
+        motions = glob.glob(f'{args_cli.input_file}/**/*.pkl', recursive=False)
+
     for motion in tqdm(motions):
         basename = os.path.basename(motion).split('.')[0]
-        args_cli.output_name = os.path.join(os.path.dirname(os.path.dirname(motion)), f"motions_npz/{basename}.npz")
+        args_cli.type = os.path.basename(os.path.dirname(motion))
+        motions_npz = "/home/ubuntu/projects/hjj-robot_lab/source/motion/motions_npz"
+        os.makedirs(f"{motions_npz}/{args_cli.type}", exist_ok=True)
+        args_cli.output_name = f"{motions_npz}/{args_cli.type}/{basename}.npz"
+        print(args_cli.output_name)
+
         run_simulator(motion, sim, scene)
 
-
+# python scripts/tools/beyondmimic/pkl_to_npz_1waist.py -f /home/ubuntu/projects/hjj-robot_lab/source/motion/motions_pkl/hard/side_somersault.pkl --input_fps 30 --headless
 if __name__ == "__main__":
     # run the main function
     main()

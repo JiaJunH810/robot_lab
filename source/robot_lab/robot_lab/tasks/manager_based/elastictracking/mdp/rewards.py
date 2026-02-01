@@ -19,22 +19,18 @@ if TYPE_CHECKING:
 def _get_body_indexes(command: MotionCommand, body_names: list[str] | None) -> list[int]:
     return [i for i, name in enumerate(command.cfg.body_names) if (body_names is None) or (name in body_names)]
 
-def apply_elastic_mask(reward: torch.Tensor, command: MotionCommand) -> torch.Tensor:
-    mask_active = command.elastic_frames > 0
-    return torch.where(mask_active, torch.zeros_like(reward), reward)
 
 def motion_global_anchor_position_error_exp(env: ManagerBasedRLEnv, command_name: str, std: float) -> torch.Tensor:
     command: MotionCommand = env.command_manager.get_term(command_name)
     error = torch.sum(torch.square(command.anchor_pos_w - command.robot_anchor_pos_w), dim=-1)
-    reward = torch.exp(-error / std**2)
-    return apply_elastic_mask(reward, command)
+    return torch.exp(-error / std**2)
 
 
 def motion_global_anchor_orientation_error_exp(env: ManagerBasedRLEnv, command_name: str, std: float) -> torch.Tensor:
     command: MotionCommand = env.command_manager.get_term(command_name)
     error = quat_error_magnitude(command.anchor_quat_w, command.robot_anchor_quat_w) ** 2
-    reward = torch.exp(-error / std**2)
-    return apply_elastic_mask(reward, command)
+    return torch.exp(-error / std**2)
+
 
 def motion_relative_body_position_error_exp(
     env: ManagerBasedRLEnv, command_name: str, std: float, body_names: list[str] | None = None
@@ -44,8 +40,7 @@ def motion_relative_body_position_error_exp(
     error = torch.sum(
         torch.square(command.body_pos_relative_w[:, body_indexes] - command.robot_body_pos_w[:, body_indexes]), dim=-1
     )
-    reward = torch.exp(-error.mean(-1) / std**2)
-    return apply_elastic_mask(reward, command)
+    return torch.exp(-error.mean(-1) / std**2)
 
 
 def motion_relative_body_orientation_error_exp(
@@ -57,8 +52,7 @@ def motion_relative_body_orientation_error_exp(
         quat_error_magnitude(command.body_quat_relative_w[:, body_indexes], command.robot_body_quat_w[:, body_indexes])
         ** 2
     )
-    reward = torch.exp(-error.mean(-1) / std**2)
-    return apply_elastic_mask(reward, command)
+    return torch.exp(-error.mean(-1) / std**2)
 
 
 def motion_global_body_linear_velocity_error_exp(
@@ -69,8 +63,7 @@ def motion_global_body_linear_velocity_error_exp(
     error = torch.sum(
         torch.square(command.body_lin_vel_w[:, body_indexes] - command.robot_body_lin_vel_w[:, body_indexes]), dim=-1
     )
-    reward = torch.exp(-error.mean(-1) / std**2)
-    return apply_elastic_mask(reward, command)
+    return torch.exp(-error.mean(-1) / std**2)
 
 
 def motion_global_body_angular_velocity_error_exp(
@@ -81,8 +74,7 @@ def motion_global_body_angular_velocity_error_exp(
     error = torch.sum(
         torch.square(command.body_ang_vel_w[:, body_indexes] - command.robot_body_ang_vel_w[:, body_indexes]), dim=-1
     )
-    reward = torch.exp(-error.mean(-1) / std**2)
-    return apply_elastic_mask(reward, command)
+    return torch.exp(-error.mean(-1) / std**2)
 
 
 def feet_contact_time(env: ManagerBasedRLEnv, sensor_cfg: SceneEntityCfg, threshold: float) -> torch.Tensor:

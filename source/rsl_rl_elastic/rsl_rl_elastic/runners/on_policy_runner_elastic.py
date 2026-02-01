@@ -21,7 +21,7 @@ from rsl_rl.modules import (
     resolve_symmetry_config,
 )
 from rsl_rl_elastic.modules import ActorCriticElastic, Elastic
-from rsl_rl_elastic.storage import RolloutStorage
+from rsl_rl_elastic.storage import RolloutStorageElastic
 from rsl_rl.utils import resolve_obs_groups
 # from rsl_rl.utils.logger import Logger
 from rsl_rl_elastic.utils.logger import Logger
@@ -293,7 +293,7 @@ class OnPolicyRunnerElastic:
         elastic: Elastic = Elastic(obs, self.cfg["obs_groups"])
 
         # Initialize the storage
-        storage = RolloutStorage(
+        storage = RolloutStorageElastic(
             "rl", self.env.num_envs, self.cfg["num_steps_per_env"], obs, [self.env.num_actions], self.device
         )
 

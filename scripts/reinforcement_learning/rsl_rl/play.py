@@ -65,7 +65,7 @@ import time
 import torch
 
 from rsl_rl.runners import DistillationRunner, OnPolicyRunner
-from rsl_rl_elastic.runners import OnPolicyRunnerElastic
+from rsl_rl_elastic.runners import OnPolicyRunnerElastic, OnPolicyRunnerCNN, OnPolicyRunnerMoe, OnPolicyRunnerAdd
 
 
 from isaaclab.devices import Se2Keyboard, Se2KeyboardCfg
@@ -80,12 +80,12 @@ from isaaclab.managers import ObservationTermCfg as ObsTerm
 from isaaclab.utils.assets import retrieve_file_path
 from isaaclab.utils.dict import print_dict
 from isaaclab.utils.pretrained_checkpoint import get_published_pretrained_checkpoint
-from isaaclab_rl.rsl_rl import RslRlBaseRunnerCfg, RslRlVecEnvWrapper, export_policy_as_jit, export_policy_as_onnx
+from isaaclab_rl.rsl_rl import RslRlBaseRunnerCfg, RslRlVecEnvWrapper, export_policy_as_jit
 from isaaclab_tasks.utils import get_checkpoint_path
 from isaaclab_tasks.utils.hydra import hydra_task_config
 
 import robot_lab.tasks  # noqa: F401
-from robot_lab.utils.exporter import attach_onnx_metadata
+from robot_lab.utils.exporter import attach_onnx_metadata, export_policy_as_onnx
 
 @hydra_task_config(args_cli.task, args_cli.agent)
 def main(env_cfg: ManagerBasedRLEnvCfg | DirectRLEnvCfg | DirectMARLEnvCfg, agent_cfg: RslRlBaseRunnerCfg):
@@ -179,6 +179,12 @@ def main(env_cfg: ManagerBasedRLEnvCfg | DirectRLEnvCfg | DirectMARLEnvCfg, agen
         runner = OnPolicyRunner(env, agent_cfg.to_dict(), log_dir=None, device=agent_cfg.device)
     elif agent_cfg.class_name == "OnPolicyRunnerElastic":
         runner = OnPolicyRunnerElastic(env, agent_cfg.to_dict(), log_dir=log_dir, device=agent_cfg.device)
+    elif agent_cfg.class_name == "OnPolicyRunnerCNN":
+        runner = OnPolicyRunnerCNN(env, agent_cfg.to_dict(), log_dir=log_dir, device=agent_cfg.device)
+    elif agent_cfg.class_name == "OnPolicyRunnerMoe":
+        runner = OnPolicyRunnerMoe(env, agent_cfg.to_dict(), log_dir=log_dir, device=agent_cfg.device)
+    elif agent_cfg.class_name == "OnPolicyRunnerAdd":
+        runner = OnPolicyRunnerAdd(env, agent_cfg.to_dict(), log_dir=log_dir, device=agent_cfg.device)
     elif agent_cfg.class_name == "DistillationRunner":
         runner = DistillationRunner(env, agent_cfg.to_dict(), log_dir=None, device=agent_cfg.device)
     else:
