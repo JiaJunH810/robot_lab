@@ -132,10 +132,13 @@ class MotionCommand(CommandTerm):
         self.masses = self.robot.data.default_mass.to(self.device).unsqueeze(-1)
 
         # 自适应采样
-        self.bin_count = int(self.motion.time_step_total.max().float() // (1 / (env.cfg.decimation * env.cfg.sim.dt))) + 1
+        # self.bin_count = int(self.motion.time_step_total.max().float() // (1 / (env.cfg.decimation * env.cfg.sim.dt))) + 1
+        self.bin_count = 6
 
         self.bin_failed_count = torch.zeros((self.motion.num_motions, self.bin_count), dtype=torch.float, device=self.device)  # 记录了从训练开始到现在，所有机器人在第N个格子上摔倒了几次
         self._current_bin_failed = torch.zeros((self.motion.num_motions, self.bin_count), dtype=torch.float, device=self.device)   # 只记录这一个step里有哪些机器人摔倒了，稍后会合进总账
+        self.motion_failed_count = torch.zeros(self.motion.num_motions, dtype=torch.float, device=self.device)
+        self._current_motion_failed = torch.zeros(self.motion.num_motions, dtype=torch.float, device=self.device)
         # 这是一个衰减权重的卷积核
         # 因为机器人在第100帧摔倒了，但通常不是100帧的问题，而是99帧或者98帧的问题，所以不仅会给100帧标记1次失败，还会给99帧标记0.8次失败，这样权重衰减下去
         self.kernel = torch.tensor(
@@ -154,6 +157,11 @@ class MotionCommand(CommandTerm):
         self.metrics["sampling_entropy"] = torch.zeros(self.num_envs, device=self.device)
         self.metrics["sampling_top1_prob"] = torch.zeros(self.num_envs, device=self.device)
         self.metrics["sampling_top1_bin"] = torch.zeros(self.num_envs, device=self.device)
+        self.all_error_body_pos = 0.
+        self.all_error_body_lin_vel = 0.
+        self.terminate_counts = 0.
+        self.fail_counts = 0.
+        self.evaluate_counts = 0
 
     # @property装饰器， 使得可以像访问变量一样访问函数
     @property
@@ -245,7 +253,7 @@ class MotionCommand(CommandTerm):
     @property
     def robot_anchor_ang_vel_w(self) -> torch.Tensor:
         return self.robot.data.body_ang_vel_w[:, self.robot_anchor_body_index]
-    
+        
     @property
     def robot_whole_com_pos_w(self) -> torch.Tensor:
         body_com_pos = self.robot.data.body_com_pos_w
@@ -284,8 +292,17 @@ class MotionCommand(CommandTerm):
         self.metrics["error_joint_pos"] = torch.norm(self.joint_pos - self.robot_joint_pos, dim=-1)
         self.metrics["error_joint_vel"] = torch.norm(self.joint_vel - self.robot_joint_vel, dim=-1)
 
+        self.evaluate_counts += 1
+        self.all_error_body_pos += torch.norm(self.body_pos_relative_w - self.robot_body_pos_w, dim=-1).mean(dim=-1).mean() * 1000.0
+        self.all_error_body_lin_vel += torch.norm(self.body_lin_vel_w - self.robot_body_lin_vel_w, dim=-1).mean(dim=-1).mean() * 1000.0
+        
+
     def _adaptive_sampling(self, env_ids: Sequence[int]):
         episode_failed = self._env.termination_manager.terminated[env_ids]  # 读取非超时而终结的环境
+        if torch.any(episode_failed):
+            fail_motion = self.motion_ids[env_ids][episode_failed]
+            self._current_motion_failed[:] = torch.bincount(fail_motion, minlength=self.motion.num_motions)
+
         if torch.any(episode_failed):
             failed_env_ids = env_ids[episode_failed]
             failed_motion_ids = self.motion_ids[failed_env_ids]
@@ -300,9 +317,13 @@ class MotionCommand(CommandTerm):
             )
         
         # Sample Motion
-        motion_failed = self.bin_failed_count.sum(dim=1)
-        motion_sampling_probs = torch.sqrt(motion_failed) + self.cfg.adaptive_uniform_ratio
-        motion_sampling_probs = motion_sampling_probs / motion_sampling_probs.sum()
+        sum_failed = self.motion_failed_count.sum()
+        if sum_failed > 1e-6:
+            motion_sampling_probs = self.motion_failed_count / sum_failed
+        else:
+            motion_sampling_probs = torch.ones_like(self.motion_failed_count) / self.motion.num_motions
+        uniform_probs = torch.ones_like(self.motion_failed_count) / self.motion.num_motions
+        motion_sampling_probs = (1.0 - self.cfg.motion_adaptive_uniform_ratio) * motion_sampling_probs + self.cfg.motion_adaptive_uniform_ratio * uniform_probs
         self.motion_ids[env_ids] = torch.multinomial(
             motion_sampling_probs, 
             num_samples=len(env_ids), 
@@ -342,7 +363,15 @@ class MotionCommand(CommandTerm):
     def _resample_command(self, env_ids: Sequence[int]):
         if len(env_ids) == 0:
             return
-        self._adaptive_sampling(env_ids)
+        if not self.cfg.is_evaluation:
+            self._adaptive_sampling(env_ids)
+        else:
+            self.fail_counts += (self._env.termination_manager.terminated[env_ids] == True).sum()
+            self.terminate_counts += len(env_ids)
+            self.time_steps[env_ids] = 0.
+            if self.evaluate_counts:
+                print(f"Avg_Error_Body_Pos, Avg_Error_Body_Lin_Vel: {self.all_error_body_pos / self.evaluate_counts}, {self.all_error_body_lin_vel / self.evaluate_counts}")
+                print(f"SR: {1-(self.fail_counts / self.terminate_counts)}")
 
         root_pos = self.body_pos_w[:, 0].clone()
         root_ori = self.body_quat_w[:, 0].clone()
@@ -400,10 +429,42 @@ class MotionCommand(CommandTerm):
         self.body_pos_relative_w = delta_pos_w + quat_apply(delta_ori_w, self.body_pos_w - anchor_pos_w_repeat)
 
         # 每个段中历史累积的失败次数(EMA)
+        self.motion_failed_count = (
+            self.cfg.adaptive_alpha * self._current_motion_failed +
+            (1 - self.cfg.adaptive_alpha) * self.motion_failed_count
+        )
         self.bin_failed_count = (
             self.cfg.adaptive_alpha * self._current_bin_failed + (1 - self.cfg.adaptive_alpha) * self.bin_failed_count
         )
+        self.print()
         self._current_bin_failed.zero_()
+        self._current_motion_failed.zero_()
+    
+    def print(self):
+        if self._env.common_step_counter % 120 == 0:
+            k = min(10, self.motion.num_motions)
+            sum_failed = self.motion_failed_count.sum()
+            if sum_failed > 1e-6:
+                motion_sampling_probs = self.motion_failed_count / sum_failed
+            else:
+                motion_sampling_probs = torch.ones_like(self.motion_failed_count) / self.motion.num_motions
+            uniform_probs = torch.ones_like(self.motion_failed_count) / self.motion.num_motions
+            motion_sampling_probs = (1.0 - self.cfg.motion_adaptive_uniform_ratio) * motion_sampling_probs + self.cfg.motion_adaptive_uniform_ratio * uniform_probs
+            top_vals, top_idxs = torch.topk(motion_sampling_probs, k=k)
+            print(f"\n" + "-" * 60)
+            print(f"统计时刻 (Total Steps): {self._env.common_step_counter}")
+            print(f"当前最难训练的 Top {k} 运动序列排行：")
+            print("-" * 60)
+            print(f"{'排名':<4} | {'运动序列名称':<35} | {'失败得分 (EMA)':<10} | {'运动序列概率':<10}")
+            print("-" * 60)
+            for i in range(k):
+                name = self.motion.files[top_idxs[i].item()]
+                score = self.motion_failed_count[top_idxs[i].item()]
+                probs = top_vals[i].item()
+                print(f"{i+1:<6} | {name:<35} | {score:<10.4f} | {probs:10.4f}")
+            
+            print("-" * 60 + "\n")
+
 
     def _set_debug_vis_impl(self, debug_vis: bool):
         if debug_vis:
@@ -472,10 +533,12 @@ class MotionCommandCfg(CommandTermCfg):
 
     joint_position_range: tuple[float, float] = (-0.52, 0.52)
 
+    is_evaluation: bool = True
     adaptive_kernel_size: int = 1
-    adaptive_lambda: float = 0.05
+    adaptive_lambda: float = 0.8
     adaptive_uniform_ratio: float = 0.1
-    adaptive_alpha: float = 0.001
+    adaptive_alpha: float = 0.01
+    motion_adaptive_uniform_ratio: float = 0.15
 
     anchor_visualizer_cfg: VisualizationMarkersCfg = FRAME_MARKER_CFG.replace(prim_path="/Visuals/Command/pose")
     anchor_visualizer_cfg.markers["frame"].scale = (0.2, 0.2, 0.2)

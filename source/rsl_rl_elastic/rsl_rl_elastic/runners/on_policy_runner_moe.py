@@ -100,7 +100,7 @@ class OnPolicyRunnerMoe:
                     # Extract intrinsic rewards (only for logging)
                     intrinsic_rewards = self.alg.intrinsic_rewards if self.alg_cfg["rnd_cfg"] else None
                     # Book keeping
-                    self.logger.process_env_step(rewards.sum(dim=-1), dones, extras, intrinsic_rewards)
+                    self.logger.process_env_step(rewards, dones, extras, intrinsic_rewards)
 
                 stop = time.time()
                 collect_time = stop - start

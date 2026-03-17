@@ -1,4 +1,4 @@
-from rsl_rl.networks import MLP
+from rsl_rl.networks import MLP, EmpiricalNormalization
 import torch
 from torch import nn
 from .cnn1d import CNN1D
@@ -40,18 +40,51 @@ class Critic(nn.Module):
 
 class MoeCritic(nn.Module):
     def __init__(self,
-                 input_dim,
+                 input_dim: int,
                  critic_hidden_dims: tuple[int] | list[int],
                  activation: str = "elu",
-                 num_experts: int = 3,
+                 num_experts: int = 20,
                  ):
         super().__init__()
-
+        self.in_features = input_dim
         self.experts = nn.ModuleList([
             MLP(input_dim, 1, critic_hidden_dims, activation)
             for _ in range(num_experts)
         ])
-
+        self.gate = nn.Sequential(
+            MLP(input_dim, num_experts, critic_hidden_dims, activation),
+            nn.Softmax(dim=-1)
+        )
+    
     def forward(self, obs):
-        export_vals = torch.cat([export(obs) for export in self.experts], dim=-1)
-        return export_vals
+        weights = self.gate(obs)
+
+        expert_returns = torch.stack([expert(obs) for expert in self.experts], dim=1)
+        weighted_return = torch.bmm(weights.unsqueeze(1), expert_returns).squeeze(-1)
+        return weighted_return
+
+class VaeCritic(nn.Module):
+    def __init__(self,
+                 input_dim: int,
+                 num_vqvae: int,
+                 critic_hidden_dims: tuple[int] | list[int],
+                 activation: str = "elu",
+                 num_experts: int = 8,
+                 ):
+        super().__init__()
+        self.in_features = input_dim
+        self.experts = nn.ModuleList([
+            MLP(input_dim, 1, critic_hidden_dims, activation)
+            for _ in range(num_experts)
+        ])
+        self.gate = nn.Sequential(
+            MLP(num_vqvae, num_experts, critic_hidden_dims, activation),
+            nn.Softmax(dim=-1)
+        )
+    
+    def forward(self, obs, code):
+        weights = self.gate(code)
+
+        expert_returns = torch.stack([expert(obs) for expert in self.experts], dim=1)
+        weighted_return = torch.bmm(weights.unsqueeze(1), expert_returns).squeeze(-1)
+        return weighted_return

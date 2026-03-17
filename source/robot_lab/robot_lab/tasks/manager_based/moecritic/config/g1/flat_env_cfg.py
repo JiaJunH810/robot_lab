@@ -16,7 +16,7 @@ class UnitreeG1BeyondMimicFlatEnvCfg(BeyondMimicEnvCfg):
         # MISSING 的地方在这里赋值了
         self.scene.robot = UNITREE_G1_23DOF_CFG.replace(prim_path="{ENV_REGEX_NS}/Robot")
         self.actions.joint_pos.scale = UNITREE_G1_23DOF_ACTION_SCALE
-        self.commands.motion.motion_file = f"/home/ubuntu/projects/hjj-robot_lab/source/motion/motions_npz/hard/side_somersault.npz"   # 加载运动序列
+        self.commands.motion.motion_file = f"/home/ubuntu/projects/hjj-robot_lab/source/motion/motions_npz/"   # 加载运动序列
         self.commands.motion.anchor_body_name = "pelvis"
         self.commands.motion.body_names = [
             "pelvis",

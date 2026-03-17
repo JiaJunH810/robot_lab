@@ -125,6 +125,9 @@ class ObservationsCfg:
         motion_anchor_ori_b = ObsTerm(
             func=mdp.motion_anchor_ori_b, params={"command_name": "motion"}, noise=Unoise(n_min=-0.05, n_max=0.05)
         )
+        projected_gravity = ObsTerm(
+            func=mdp.projected_gravity, params={"command_name": "motion"}, noise=Unoise(n_min=-0.05, n_max=0.05)
+        )
         base_ang_vel = ObsTerm(func=mdp.base_ang_vel, noise=Unoise(n_min=-0.2, n_max=0.2))
         joint_pos = ObsTerm(func=mdp.joint_pos_rel, noise=Unoise(n_min=-0.01, n_max=0.01))
         joint_vel = ObsTerm(func=mdp.joint_vel_rel, noise=Unoise(n_min=-0.5, n_max=0.5))
@@ -139,6 +142,7 @@ class ObservationsCfg:
         command = ObsTerm(func=mdp.generated_commands, params={"command_name": "motion"})
         motion_anchor_pos_b = ObsTerm(func=mdp.motion_anchor_pos_b, params={"command_name": "motion"})
         motion_anchor_ori_b = ObsTerm(func=mdp.motion_anchor_ori_b, params={"command_name": "motion"})
+        projected_gravity = ObsTerm(func=mdp.projected_gravity, params={"command_name": "motion"})
         body_pos = ObsTerm(func=mdp.robot_body_pos_b, params={"command_name": "motion"})
         body_ori = ObsTerm(func=mdp.robot_body_ori_b, params={"command_name": "motion"})
         base_lin_vel = ObsTerm(func=mdp.base_lin_vel)
@@ -152,7 +156,7 @@ class ObservationsCfg:
         future_anchor_pos_b = ObsTerm(func=mdp.future_anchor_pos_b, params={"command_name": "motion"})
         future_anchor_ori_b = ObsTerm(func=mdp.future_anchor_ori_b, params={"command_name": "motion"})
         future_anchor_lin_vel_b = ObsTerm(func=mdp.future_anchor_vel_b, params={"command_name": "motion"})
-        # future_body_pos_b = ObsTerm(func=mdp.future_body_pos_b, params={"command_name": "motion"})
+        future_anchor_height = ObsTerm(func=mdp.future_anchor_height, params={"command_name": "motion"})
 
     # observation groups
     policy: PolicyCfg = PolicyCfg()
@@ -204,7 +208,25 @@ class EventCfg:
     )
 
 @configclass
-class RootRewardsCfg:
+class RewardsCfg:
+    """Reward terms for the MDP."""
+    '''
+    RewardTermCfg本身不包含任何计算逻辑。它只是一个菜单，告诉系统要用哪个函数，要多大权重
+    函数就是func参数，权重就是weight参数
+    '''
+    # Base
+    # 这里调用的是isaaclab官方库中的mdp奖励函数
+    joint_acc_l2 = RewTerm(func=mdp.joint_acc_l2, weight=-2.5e-7)
+    joint_torques_l2 = RewTerm(func=mdp.joint_torques_l2, weight=-1e-5)
+    action_rate_l2 = RewTerm(func=mdp.action_rate_l2, weight=-1e-1)
+    joint_pos_limits = RewTerm(
+        func=mdp.joint_pos_limits,
+        weight=-10.0,
+        params={"asset_cfg": SceneEntityCfg("robot", joint_names=[".*"])},
+    )
+
+    # Tracking
+    # 这里调用的是自己写的mdp奖励函数
     motion_global_anchor_pos = RewTerm(
         func=mdp.motion_global_anchor_position_error_exp,
         weight=0.5,
@@ -215,19 +237,6 @@ class RootRewardsCfg:
         weight=0.5,
         params={"command_name": "motion", "std": 0.4},
     )
-    # whole_com_balance = RewTerm(
-    #     func=mdp.whole_com_balance,
-    #     weight=0.5,
-    #     params={
-    #         "command_name": "motion",
-    #         "sensor_cfg": SceneEntityCfg("contact_forces"),
-    #         "std": 0.4
-    #     }
-    # )
-    
-
-@configclass
-class TrackingRewardsCfg:
     motion_body_pos = RewTerm(
         func=mdp.motion_relative_body_position_error_exp,
         weight=1.0,
@@ -249,16 +258,7 @@ class TrackingRewardsCfg:
         params={"command_name": "motion", "std": 3.14},
     )
 
-@configclass
-class SafetyRewardsCfg:
-    joint_acc_l2 = RewTerm(func=mdp.joint_acc_l2, weight=-2.5e-7)
-    joint_torques_l2 = RewTerm(func=mdp.joint_torques_l2, weight=-1e-5)
-    action_rate_l2 = RewTerm(func=mdp.action_rate_l2, weight=-1e-1)
-    joint_pos_limits = RewTerm(
-        func=mdp.joint_pos_limits,
-        weight=-10.0,
-        params={"asset_cfg": SceneEntityCfg("robot", joint_names=[".*"])},
-    )
+    # Others
     # undesired_contacts = RewTerm(
     #     func=mdp.undesired_contacts,
     #     weight=-0.1,
@@ -272,6 +272,7 @@ class SafetyRewardsCfg:
     #         "threshold": 1.0,
     #     },
     # )
+
 
 @configclass
 class TerminationsCfg:
@@ -290,7 +291,7 @@ class TerminationsCfg:
         func=mdp.bad_motion_body_pos_z_only,
         params={
             "command_name": "motion",
-            "threshold": 0.25,
+            "threshold": 0.35,
             "body_names": [
                 "left_ankle_roll_link",
                 "right_ankle_roll_link",
@@ -324,10 +325,7 @@ class BeyondMimicEnvCfg(ManagerBasedRLEnvCfg):
     actions: ActionsCfg = ActionsCfg()
     commands: CommandsCfg = CommandsCfg()
     # MDP settings
-    rewards: object = None
-    root_rewards: RootRewardsCfg = RootRewardsCfg()
-    tracking_rewards: TrackingRewardsCfg = TrackingRewardsCfg()
-    safety_rewards: SafetyRewardsCfg = SafetyRewardsCfg()
+    rewards: RewardsCfg = RewardsCfg()
     terminations: TerminationsCfg = TerminationsCfg()
     events: EventCfg = EventCfg()
     curriculum: CurriculumCfg = CurriculumCfg()

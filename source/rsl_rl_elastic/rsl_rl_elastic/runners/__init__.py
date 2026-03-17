@@ -2,3 +2,4 @@ from .on_policy_runner_elastic import OnPolicyRunnerElastic
 from .on_policy_runner_cnn import OnPolicyRunnerCNN
 from .on_policy_runner_moe import OnPolicyRunnerMoe
 from .on_policy_runner_add import OnPolicyRunnerAdd
+from .on_policy_runner_vae import OnPolicyRunnerVae

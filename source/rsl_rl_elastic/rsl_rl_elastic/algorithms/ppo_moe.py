@@ -161,7 +161,9 @@ class PPOMoe:
 
         # Bootstrapping on time outs
         if "time_outs" in extras:
-            self.transition.rewards += self.gamma * self.transition.values * extras["time_outs"].unsqueeze(1).to(self.device)
+            self.transition.rewards += self.gamma * torch.squeeze(
+                self.transition.values * extras["time_outs"].unsqueeze(1).to(self.device), 1
+            )
 
         # Record the transition
         self.storage.add_transition(self.transition)
@@ -186,7 +188,7 @@ class PPOMoe:
             # Return: R_t = A(s_t, a_t) + V(s_t)
             st.returns[step] = advantage + st.values[step]
         # Compute the advantages
-        st.advantages = (st.returns - st.values).sum(dim=-1)
+        st.advantages = st.returns - st.values
 
         # Normalize the advantages if per minibatch normalization is not used
         if not self.normalize_advantage_per_mini_batch:

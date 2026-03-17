@@ -6,6 +6,7 @@ import onnx
 import yaml
 from tqdm import tqdm
 import onnxruntime
+import joblib
 
 @torch.jit.script
 def quat_unique(q: torch.Tensor) -> torch.Tensor:
@@ -181,6 +182,7 @@ class RobotLabSim2Sim:
         self.motion_body_lin_vel_w = motion["body_lin_vel_w"]
 
         self.m = mujoco.MjModel.from_xml_path(xml_path)
+        self.m.opt.timestep = 0.001
         self.d = mujoco.MjData(self.m)
         mujoco.mj_resetDataKeyframe(self.m, self.d, 0)
         mujoco.mj_step(self.m, self.d)
@@ -253,6 +255,11 @@ class RobotLabSim2Sim:
 
         return mat[:, :2].flatten()
     
+    def projected_gravity(self, anchor_quat):
+        gravity = torch.tensor([0.0, 0.0, -1.0], dtype=anchor_quat.dtype)
+        return quat_apply_inverse(anchor_quat, gravity)
+
+    
     def future_motion(self, timestep, horizon, anchor_name, extra_body_name):
         future_idx = np.arange(timestep, timestep + horizon * 5, 5)
         future_idx = np.minimum(future_idx, self.motion_joint_pos.shape[0] - 1)
@@ -270,6 +277,7 @@ class RobotLabSim2Sim:
         )
         ori = quat_unique(ori)
         vel = quat_apply_inverse(current_anchor_quat, future_anchor_lin_vel)
+        height = future_anchor_pos[..., -1:]
 
         # extra_idx = [self.lab_body_names.index(name) for name in extra_body_name]
         # future_extra_body_pos = torch.tensor(self.motion_body_pos_w[np.ix_(future_idx, extra_idx)]).view(-1, 3)
@@ -288,7 +296,7 @@ class RobotLabSim2Sim:
         print("帧数：", self.motion_joint_pos.shape[0])
         sim_duration = self.motion_joint_pos.shape[0]
         sim_dt = 0.002
-        sim_decimation = 10
+        sim_decimation = 20
         timestep = 0
         anchor_name = "pelvis"
         extra_body_name = ["left_ankle_roll_link", "right_ankle_roll_link", "left_wrist_roll_rubber_hand", "right_wrist_roll_rubber_hand",]
@@ -303,7 +311,7 @@ class RobotLabSim2Sim:
         
         for i in tqdm(range(int(sim_duration / sim_dt)), desc="Running simulation..."):
             xml_joint_pos, xml_joint_vel, root_pos, root_quat, ang_vel = self.extract_data(anchor_name)
-            
+           
             if i % sim_decimation == 0:
                 # timestep = min(timestep, self.motion_joint_pos.shape[0] - 1)
                 command = np.concatenate((self.motion_joint_pos[timestep, :], self.motion_joint_vel[timestep, :]), axis=-1)
@@ -312,6 +320,7 @@ class RobotLabSim2Sim:
                     torch.tensor(self.motion_body_pos_w[timestep, self.lab_body_names.index(anchor_name), :]),
                     torch.tensor(self.motion_body_quat_w[timestep, self.lab_body_names.index(anchor_name), :])
                     ).numpy()
+                projected_gravity = self.projected_gravity(torch.tensor(root_quat))
                 base_ang_vel = ang_vel
                 joint_pos = xml_joint_pos[self.xml_to_lab] - self.lab_default_joint_pos
                 joint_vel = xml_joint_vel[self.xml_to_lab]
@@ -321,6 +330,7 @@ class RobotLabSim2Sim:
                 obs = np.concatenate([
                     command,
                     motion_anchor_ori_b,
+                    # projected_gravity,
                     base_ang_vel,
                     joint_pos,
                     joint_vel,
@@ -330,6 +340,7 @@ class RobotLabSim2Sim:
 
                 lab_actions = self.policy.run(['actions'], {'obs': obs})[0].squeeze()
                 action_buffer = lab_actions.copy()
+                
                 scale_actions = lab_actions * self.lab_action_scale
                 
                 pd_target = scale_actions[self.lab_to_xml] + self.lab_default_joint_pos[self.lab_to_xml]
@@ -349,7 +360,7 @@ class RobotLabSim2Sim:
 if __name__ == "__main__":
     # 路径配置
     xml_path = "/home/ubuntu/projects/RoboJuDo/assets/robots/g1/g1_23dof_rev_1_0.xml"
-    motion_file = "/home/ubuntu/projects/hjj-robot_lab/source/motion/motions_npz/hard/side_somersault.npz"
+    motion_file = "/home/ubuntu/projects/hjj-robot_lab/source/motion/motion_hjq/dance/90_08_poses.npz"
     # policy_path = "/home/ubuntu/projects/hjj-robot_lab/logs/rsl_rl/unitree_g1_moecritc_flat/2026-01-22_18-02-46/exported/policy.onnx"
     policy_path = "/home/ubuntu/projects/hjj-robot_lab/logs/rsl_rl/unitree_g1_moecritc_flat/2026-01-24_19-54-44/exported/policy.onnx"
     

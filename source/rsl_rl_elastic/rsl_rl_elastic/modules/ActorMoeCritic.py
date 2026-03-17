@@ -55,11 +55,10 @@ class ActorMoeCritic(nn.Module):
 
         # Actor
         self.state_dependent_std = state_dependent_std
-        # if self.state_dependent_std:
-        #     self.actor = MLP(num_actor_obs, [2, num_actions], actor_hidden_dims, activation)
-        # else:
-        #     self.actor = MLP(num_actor_obs, num_actions, actor_hidden_dims, activation)
-        self.actor = MoeActor(input_dim=num_actor_obs + num_future, backbone_dim=128, num_action=num_actions, actor_hidden_dims=actor_hidden_dims, activation=activation)
+        if self.state_dependent_std:
+            self.actor = MLP(num_actor_obs, [2, num_actions], actor_hidden_dims, activation)
+        else:
+            self.actor = MoeActor(input_dim=num_actor_obs, num_action=num_actions, actor_hidden_dims=actor_hidden_dims, activation=activation)
         print(f"Actor MLP: {self.actor}")
 
         # Actor observation normalization
@@ -70,7 +69,7 @@ class ActorMoeCritic(nn.Module):
             self.actor_obs_normalizer = torch.nn.Identity()
 
         # Critic
-        self.critic = MoeCritic(input_dim=num_critic_obs + num_future, critic_hidden_dims=critic_hidden_dims, activation=activation)
+        self.critic = MoeCritic(input_dim=num_critic_obs, critic_hidden_dims=critic_hidden_dims, activation=activation)
         print(f"Critic MLP: {self.critic}")
 
         # Critic observation normalization
@@ -170,15 +169,15 @@ class ActorMoeCritic(nn.Module):
 
     def get_actor_obs(self, obs: TensorDict) -> torch.Tensor:
         essence = torch.cat([obs[obs_group] for obs_group in self.obs_groups["policy"]], dim=-1)
-        future = torch.cat([obs[obs_group] for obs_group in self.obs_groups["future"]], dim=-1)
-        obs = torch.cat([essence, future.flatten(start_dim=-2)], dim=-1)
-        return obs
+        # future = torch.cat([obs[obs_group] for obs_group in self.obs_groups["future"]], dim=-1)
+        # obs = torch.cat([essence, future.flatten(start_dim=-2)], dim=-1)
+        return essence
 
     def get_critic_obs(self, obs: TensorDict) -> torch.Tensor:
         essence = torch.cat([obs[obs_group] for obs_group in self.obs_groups["critic"]], dim=-1)
-        future = torch.cat([obs[obs_group] for obs_group in self.obs_groups["future"]], dim=-1)
-        obs = torch.cat([essence, future.flatten(start_dim=-2)], dim=-1)
-        return obs
+        # future = torch.cat([obs[obs_group] for obs_group in self.obs_groups["future"]], dim=-1)
+        # obs = torch.cat([essence, future.flatten(start_dim=-2)], dim=-1)
+        return essence
 
     def get_actions_log_prob(self, actions: torch.Tensor) -> torch.Tensor:
         return self.distribution.log_prob(actions).sum(dim=-1)

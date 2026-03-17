@@ -111,12 +111,7 @@ class MoeG1Env(ManagerBasedRLEnv):
         self.termination_manager = TerminationManager(self.cfg.terminations, self)
         print("[INFO] Termination Manager: ", self.termination_manager)
         # -- reward manager
-        self.root_reward_manager = RewardManager(self.cfg.root_rewards, self)
-        print("[INFO] Root Reward Manager: ", self.root_reward_manager)
-        self.tracking_reward_manager = RewardManager(self.cfg.tracking_rewards, self)
-        print("[INFO] Tracking Reward Manager: ", self.tracking_reward_manager)
-        self.safety_reward_manager = RewardManager(self.cfg.safety_rewards, self)
-        print("[INFO] Safety Reward Manager: ", self.safety_reward_manager)
+        self.reward_manager = RewardManager(self.cfg.rewards, self)
         # -- curriculum manager
         self.curriculum_manager = CurriculumManager(self.cfg.curriculum, self)
         print("[INFO] Curriculum Manager: ", self.curriculum_manager)
@@ -136,9 +131,7 @@ class MoeG1Env(ManagerBasedRLEnv):
             "observation_manager": ManagerLiveVisualizer(manager=self.observation_manager),
             "command_manager": ManagerLiveVisualizer(manager=self.command_manager),
             "termination_manager": ManagerLiveVisualizer(manager=self.termination_manager),
-            "root_reward_manager": ManagerLiveVisualizer(manager=self.root_reward_manager),
-            "tracking_reward_manager": ManagerLiveVisualizer(manager=self.tracking_reward_manager),
-            "safety_reward_manager": ManagerLiveVisualizer(manager=self.safety_reward_manager),
+            "reward_manager": ManagerLiveVisualizer(manager=self.reward_manager),
             "curriculum_manager": ManagerLiveVisualizer(manager=self.curriculum_manager),
         }
 
@@ -201,10 +194,7 @@ class MoeG1Env(ManagerBasedRLEnv):
         self.reset_terminated = self.termination_manager.terminated
         self.reset_time_outs = self.termination_manager.time_outs
         # -- reward computation
-        root_reward_buf = self.root_reward_manager.compute(dt=self.step_dt)
-        tracking_reward_buf = self.tracking_reward_manager.compute(dt=self.step_dt)
-        safety_reward_buf = self.safety_reward_manager.compute(dt=self.step_dt)
-        self.reward_buf = torch.stack([root_reward_buf, tracking_reward_buf, safety_reward_buf], dim=-1)
+        self.reward_buf = self.reward_manager.compute(dt=self.step_dt)
 
         if len(self.recorder_manager.active_terms) > 0:
             # update observations for recording if needed
@@ -371,11 +361,7 @@ class MoeG1Env(ManagerBasedRLEnv):
         info = self.action_manager.reset(env_ids)
         self.extras["log"].update(info)
         # -- rewards manager
-        info = self.root_reward_manager.reset(env_ids)
-        self.extras["log"].update(info)
-        info = self.tracking_reward_manager.reset(env_ids)
-        self.extras["log"].update(info)
-        info = self.safety_reward_manager.reset(env_ids)
+        info = self.reward_manager.reset(env_ids)
         self.extras["log"].update(info)
         # -- curriculum manager
         info = self.curriculum_manager.reset(env_ids)

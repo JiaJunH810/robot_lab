@@ -385,19 +385,19 @@ def main():
     if os.path.isfile(args_cli.input_file):
         motions = [args_cli.input_file]
     else:
-        motions = glob.glob(f'{args_cli.input_file}/**/*.pkl', recursive=False)
+        motions = glob.glob(f'{args_cli.input_file}/**/*.pkl', recursive=True)
 
     for motion in tqdm(motions):
         basename = os.path.basename(motion).split('.')[0]
         args_cli.type = os.path.basename(os.path.dirname(motion))
-        motions_npz = "/home/ubuntu/projects/hjj-robot_lab/source/motion/motions_npz"
+        motions_npz = "/home/ubuntu/projects/hjj-robot_lab/source/motion/motions_npz/"
         os.makedirs(f"{motions_npz}/{args_cli.type}", exist_ok=True)
         args_cli.output_name = f"{motions_npz}/{args_cli.type}/{basename}.npz"
         print(args_cli.output_name)
 
         run_simulator(motion, sim, scene)
 
-# python scripts/tools/beyondmimic/pkl_to_npz_1waist.py -f /home/ubuntu/projects/hjj-robot_lab/source/motion/motions_pkl/hard/side_somersault.pkl --input_fps 30 --headless
+# python scripts/tools/beyondmimic/pkl_to_npz_1waist.py -f /home/ubuntu/projects/hjj-robot_lab/source/motion/motions_pkl/cycle --input_fps 30 --headless
 if __name__ == "__main__":
     # run the main function
     main()
