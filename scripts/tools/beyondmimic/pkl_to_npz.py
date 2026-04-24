@@ -382,7 +382,7 @@ def main():
 
     for motion in tqdm(motions):
         basename = os.path.basename(motion).split('.')[0]
-        args_cli.output_name = f"source/robot_lab/robot_lab/tasks/manager_based/motiontracking/config/g1/motion/{basename}.npz"
+        args_cli.output_name = f"source/robot_lab/robot_lab/tasks/manager_based/motiontracking/config/cyborg/motion/{basename}.npz"
         print(args_cli.output_name)
 
         run_simulator(motion, sim, scene)
