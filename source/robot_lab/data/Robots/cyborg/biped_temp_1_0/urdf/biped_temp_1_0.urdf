@@ -26,7 +26,7 @@
         xyz="0 0 0" rpy="0 0 0" />
       <geometry>
         <mesh
-          filename="/home/cyborg/Downloads/biped_temp_1_0/meshes/base_link.STL" />
+          filename="../meshes/base_link.STL" />
       </geometry>
       <material
         name="">
@@ -79,7 +79,7 @@
         xyz="0 0 0" rpy="0 0 0" />
       <geometry>
         <mesh
-          filename="/home/cyborg/Downloads/biped_temp_1_0/meshes/hip_l_roll_link.STL" />
+          filename="../meshes/hip_l_roll_link.STL" />
       </geometry>
       <material
         name="">
@@ -131,7 +131,7 @@
         xyz="0 0 0" rpy="0 0 0" />
       <geometry>
         <mesh
-          filename="/home/cyborg/Downloads/biped_temp_1_0/meshes/hip_l_yaw_link.STL" />
+          filename="../meshes/hip_l_yaw_link.STL" />
       </geometry>
       <material
         name="">
@@ -183,7 +183,7 @@
         xyz="0 0 0" rpy="0 0 0" />
       <geometry>
         <mesh
-          filename="/home/cyborg/Downloads/biped_temp_1_0/meshes/hip_l_pitch_link.STL" />
+          filename="../meshes/hip_l_pitch_link.STL" />
       </geometry>
       <material
         name="">
@@ -235,7 +235,7 @@
         xyz="0 0 0" rpy="0 0 0" />
       <geometry>
         <mesh
-          filename="/home/cyborg/Downloads/biped_temp_1_0/meshes/knee_l_pitch_link.STL" />
+          filename="../meshes/knee_l_pitch_link.STL" />
       </geometry>
       <material
         name="">
@@ -287,7 +287,7 @@
         xyz="0 0 0" rpy="0 0 0" />
       <geometry>
         <mesh
-          filename="/home/cyborg/Downloads/biped_temp_1_0/meshes/ankle_l_pitch_link.STL" />
+          filename="../meshes/ankle_l_pitch_link.STL" />
       </geometry>
       <material
         name="">
@@ -339,7 +339,7 @@
         xyz="0 0 0" rpy="0 0 0" />
       <geometry>
         <mesh
-          filename="/home/cyborg/Downloads/biped_temp_1_0/meshes/ankle_l_roll_link.STL" />
+          filename="../meshes/ankle_l_roll_link.STL" />
       </geometry>
       <material
         name="">
@@ -352,7 +352,7 @@
         xyz="0 0 0" rpy="0 0 0" />
       <geometry>
         <mesh
-          filename="/home/cyborg/Downloads/biped_temp_1_0/meshes/ankle_l_roll_link.STL" />
+          filename="../meshes/ankle_l_roll_link.STL" />
       </geometry>
     </collision>
   </link>
@@ -396,7 +396,7 @@
         xyz="0 0 0" rpy="0 0 0" />
       <geometry>
         <mesh
-          filename="/home/cyborg/Downloads/biped_temp_1_0/meshes/hip_r_roll_link.STL" />
+          filename="../meshes/hip_r_roll_link.STL" />
       </geometry>
       <material
         name="">
@@ -448,7 +448,7 @@
         xyz="0 0 0" rpy="0 0 0" />
       <geometry>
         <mesh
-          filename="/home/cyborg/Downloads/biped_temp_1_0/meshes/hip_r_yaw_link.STL" />
+          filename="../meshes/hip_r_yaw_link.STL" />
       </geometry>
       <material
         name="">
@@ -500,7 +500,7 @@
         xyz="0 0 0" rpy="0 0 0" />
       <geometry>
         <mesh
-          filename="/home/cyborg/Downloads/biped_temp_1_0/meshes/hip_r_pitch_link.STL" />
+          filename="../meshes/hip_r_pitch_link.STL" />
       </geometry>
       <material
         name="">
@@ -552,7 +552,7 @@
         xyz="0 0 0" rpy="0 0 0" />
       <geometry>
         <mesh
-          filename="/home/cyborg/Downloads/biped_temp_1_0/meshes/knee_r_pitch_link.STL" />
+          filename="../meshes/knee_r_pitch_link.STL" />
       </geometry>
       <material
         name="">
@@ -605,7 +605,7 @@
         xyz="0 0 0" rpy="0 0 0" />
       <geometry>
         <mesh
-          filename="/home/cyborg/Downloads/biped_temp_1_0/meshes/ankle_r_pitch_link.STL" />
+          filename="../meshes/ankle_r_pitch_link.STL" />
       </geometry>
       <material
         name="">
@@ -657,7 +657,7 @@
         xyz="0 0 0" rpy="0 0 0" />
       <geometry>
         <mesh
-          filename="/home/cyborg/Downloads/biped_temp_1_0/meshes/ankle_r_roll_link.STL" />
+          filename="../meshes/ankle_r_roll_link.STL" />
       </geometry>
       <material
         name="">
@@ -670,7 +670,7 @@
         xyz="0 0 0" rpy="0 0 0" />
       <geometry>
         <mesh
-          filename="/home/cyborg/Downloads/biped_temp_1_0/meshes/ankle_r_roll_link.STL" />
+          filename="../meshes/ankle_r_roll_link.STL" />
       </geometry>
     </collision>
   </link>
@@ -714,7 +714,7 @@
         xyz="0 0 0" rpy="0 0 0" />
       <geometry>
         <mesh
-          filename="/home/cyborg/Downloads/biped_temp_1_0/meshes/waist_yaw_link.STL" />
+          filename="../meshes/waist_yaw_link.STL" />
       </geometry>
       <material
         name="">
@@ -766,7 +766,7 @@
         xyz="0 0 0" rpy="0 0 0" />
       <geometry>
         <mesh
-          filename="/home/cyborg/Downloads/biped_temp_1_0/meshes/waist_pitch_link.STL" />
+          filename="../meshes/waist_pitch_link.STL" />
       </geometry>
       <material
         name="">
@@ -821,7 +821,7 @@
         xyz="0 0 0" rpy="0 0 0" />
       <geometry>
         <mesh
-          filename="/home/cyborg/Downloads/biped_temp_1_0/meshes/arm_l_01_link.STL" />
+          filename="../meshes/arm_l_01_link.STL" />
       </geometry>
       <material
         name="">
@@ -873,7 +873,7 @@
         xyz="0 0 0" rpy="0 0 0" />
       <geometry>
         <mesh
-          filename="/home/cyborg/Downloads/biped_temp_1_0/meshes/arm_l_02_link.STL" />
+          filename="../meshes/arm_l_02_link.STL" />
       </geometry>
       <material
         name="">
@@ -925,7 +925,7 @@
         xyz="0 0 0" rpy="0 0 0" />
       <geometry>
         <mesh
-          filename="/home/cyborg/Downloads/biped_temp_1_0/meshes/arm_l_03_link.STL" />
+          filename="../meshes/arm_l_03_link.STL" />
       </geometry>
       <material
         name="">
@@ -978,7 +978,7 @@
         xyz="0 0 0" rpy="0 0 0" />
       <geometry>
         <mesh
-          filename="/home/cyborg/Downloads/biped_temp_1_0/meshes/arm_l_04_link.STL" />
+          filename="../meshes/arm_l_04_link.STL" />
       </geometry>
       <material
         name="">
@@ -1030,7 +1030,7 @@
         xyz="0 0 0" rpy="0 0 0" />
       <geometry>
         <mesh
-          filename="/home/cyborg/Downloads/biped_temp_1_0/meshes/arm_l_05_link.STL" />
+          filename="../meshes/arm_l_05_link.STL" />
       </geometry>
       <material
         name="">
@@ -1082,7 +1082,7 @@
         xyz="0 0 0" rpy="0 0 0" />
       <geometry>
         <mesh
-          filename="/home/cyborg/Downloads/biped_temp_1_0/meshes/arm_l_06_link.STL" />
+          filename="../meshes/arm_l_06_link.STL" />
       </geometry>
       <material
         name="">
@@ -1134,7 +1134,7 @@
         xyz="0 0 0" rpy="0 0 0" />
       <geometry>
         <mesh
-          filename="/home/cyborg/Downloads/biped_temp_1_0/meshes/arm_l_07_link.STL" />
+          filename="../meshes/arm_l_07_link.STL" />
       </geometry>
       <material
         name="">
@@ -1189,7 +1189,7 @@
         xyz="0 0 0" rpy="0 0 0" />
       <geometry>
         <mesh
-          filename="/home/cyborg/Downloads/biped_temp_1_0/meshes/arm_r_01_link.STL" />
+          filename="../meshes/arm_r_01_link.STL" />
       </geometry>
       <material
         name="">
@@ -1241,7 +1241,7 @@
         xyz="0 0 0" rpy="0 0 0" />
       <geometry>
         <mesh
-          filename="/home/cyborg/Downloads/biped_temp_1_0/meshes/arm_r_02_link.STL" />
+          filename="../meshes/arm_r_02_link.STL" />
       </geometry>
       <material
         name="">
@@ -1294,7 +1294,7 @@
         xyz="0 0 0" rpy="0 0 0" />
       <geometry>
         <mesh
-          filename="/home/cyborg/Downloads/biped_temp_1_0/meshes/arm_r_03_link.STL" />
+          filename="../meshes/arm_r_03_link.STL" />
       </geometry>
       <material
         name="">
@@ -1346,7 +1346,7 @@
         xyz="0 0 0" rpy="0 0 0" />
       <geometry>
         <mesh
-          filename="/home/cyborg/Downloads/biped_temp_1_0/meshes/arm_r_04_link.STL" />
+          filename="../meshes/arm_r_04_link.STL" />
       </geometry>
       <material
         name="">
@@ -1398,7 +1398,7 @@
         xyz="0 0 0" rpy="0 0 0" />
       <geometry>
         <mesh
-          filename="/home/cyborg/Downloads/biped_temp_1_0/meshes/arm_r_05_link.STL" />
+          filename="../meshes/arm_r_05_link.STL" />
       </geometry>
       <material
         name="">
@@ -1450,7 +1450,7 @@
         xyz="0 0 0" rpy="0 0 0" />
       <geometry>
         <mesh
-          filename="/home/cyborg/Downloads/biped_temp_1_0/meshes/arm_r_06_link.STL" />
+          filename="../meshes/arm_r_06_link.STL" />
       </geometry>
       <material
         name="">
@@ -1502,7 +1502,7 @@
         xyz="0 0 0" rpy="0 0 0" />
       <geometry>
         <mesh
-          filename="/home/cyborg/Downloads/biped_temp_1_0/meshes/arm_r_07_link.STL" />
+          filename="../meshes/arm_r_07_link.STL" />
       </geometry>
       <material
         name="">
@@ -1557,7 +1557,7 @@
         xyz="0 0 0" rpy="0 0 0" />
       <geometry>
         <mesh
-          filename="/home/cyborg/Downloads/biped_temp_1_0/meshes/head_yaw_link.STL" />
+          filename="../meshes/head_yaw_link.STL" />
       </geometry>
       <material
         name="">
@@ -1610,7 +1610,7 @@
         xyz="0 0 0" rpy="0 0 0" />
       <geometry>
         <mesh
-          filename="/home/cyborg/Downloads/biped_temp_1_0/meshes/head_pitch_link.STL" />
+          filename="../meshes/head_pitch_link.STL" />
       </geometry>
       <material
         name="">

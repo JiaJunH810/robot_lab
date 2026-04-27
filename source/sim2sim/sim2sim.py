@@ -277,7 +277,7 @@ if __name__ == "__main__":
     # 路径配置
     xml_path = "/home/cyborg/Desktop/projects/robot_lab/source/sim2sim/assets/biped_temp_1_0.xml"
     motion_file = "/home/cyborg/Desktop/projects/robot_lab/source/robot_lab/robot_lab/tasks/manager_based/motiontracking/config/cyborg/motion/B1_-_stand_to_walk_stageii.npz"
-    policy_path = "/home/cyborg/Desktop/projects/robot_lab/logs/rsl_rl/cyborg_beyondmimic/2026-04-24_19-29-43/exported/policy.onnx"
+    policy_path = "/home/cyborg/Desktop/projects/robot_lab/logs/rsl_rl/cyborg_beyondmimic/2026-04-27_10-39-31/exported/policy.onnx"
     
     r = RobotLabSim2Sim(xml_path, motion_file, policy_path)
     r.run()
