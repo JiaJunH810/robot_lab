@@ -67,7 +67,7 @@ from isaaclab.utils.math import axis_angle_from_quat, quat_conjugate, quat_mul, 
 ##
 # Pre-defined configs
 ##
-from robot_lab.assets.cyborg import CYBORG_BIPED_CFG
+from robot_lab.assets.unitree import UNITREE_G1_23DOF_CFG
 
 
 @configclass
@@ -87,7 +87,7 @@ class ReplayMotionsSceneCfg(InteractiveSceneCfg):
     )
 
     # articulation
-    robot: ArticulationCfg = CYBORG_BIPED_CFG.replace(prim_path="{ENV_REGEX_NS}/Robot")
+    robot: ArticulationCfg = UNITREE_G1_23DOF_CFG.replace(prim_path="{ENV_REGEX_NS}/Robot")
 
 def ToTensor(array, device):
     return torch.tensor(array, dtype=torch.float32, device=device)
@@ -247,39 +247,29 @@ def run_simulator(motion_file, sim: sim_utils.SimulationContext, scene: Interact
     # Extract scene entities
     robot = scene["robot"]
     joint_sdk_names = [
-        # === 左腿 ===
-        "J_hip_l_roll",
-        "J_hip_l_yaw",
-        "J_hip_l_pitch",
-        "J_knee_l_pitch",
-        "J_ankle_l_pitch",
-        "J_ankle_l_roll",
-        # === 右腿 ===
-        "J_hip_r_roll",
-        "J_hip_r_yaw",
-        "J_hip_r_pitch",
-        "J_knee_r_pitch",
-        "J_ankle_r_pitch",
-        "J_ankle_r_roll",
-        # === 腰部 ===
-        "J_waist_yaw",
-        "J_waist_pitch",
-        # === 左臂 ===
-        "J_arm_l_01",
-        "J_arm_l_02",
-        "J_arm_l_03",
-        "J_arm_l_04",
-        "J_arm_l_05",
-        "J_arm_l_06",
-        "J_arm_l_07",
-        # === 右臂 ===
-        "J_arm_r_01",
-        "J_arm_r_02",
-        "J_arm_r_03",
-        "J_arm_r_04",
-        "J_arm_r_05",
-        "J_arm_r_06",
-        "J_arm_r_07",
+        "left_hip_pitch_joint",
+        "left_hip_roll_joint",
+        "left_hip_yaw_joint",
+        "left_knee_joint",
+        "left_ankle_pitch_joint",
+        "left_ankle_roll_joint",
+        "right_hip_pitch_joint",
+        "right_hip_roll_joint",
+        "right_hip_yaw_joint",
+        "right_knee_joint",
+        "right_ankle_pitch_joint",
+        "right_ankle_roll_joint",
+        "waist_yaw_joint",
+        "left_shoulder_pitch_joint",
+        "left_shoulder_roll_joint",
+        "left_shoulder_yaw_joint",
+        "left_elbow_joint",
+        "left_wrist_roll_joint",
+        "right_shoulder_pitch_joint",
+        "right_shoulder_roll_joint",
+        "right_shoulder_yaw_joint",
+        "right_elbow_joint",
+        "right_wrist_roll_joint",
     ]
     robot_joint_indexes = robot.find_joints(joint_sdk_names, preserve_order=True)[0]
 
@@ -382,12 +372,12 @@ def main():
 
     for motion in tqdm(motions):
         basename = os.path.basename(motion).split('.')[0]
-        args_cli.output_name = f"source/robot_lab/robot_lab/tasks/manager_based/motiontracking/config/cyborg/motion/{basename}.npz"
+        args_cli.output_name = f"source/robot_lab/robot_lab/tasks/manager_based/motiontracking/config/g1/motion/{basename}.npz"
         print(args_cli.output_name)
 
         run_simulator(motion, sim, scene)
 
-# python scripts/tools/beyondmimic/pkl_to_npz.py -f /home/cyborg/Desktop/datas/Cyborg/motion/B1_-_stand_to_walk_stageii.pkl --input_fps 30
+# python scripts/tools/beyondmimic/pkl_to_npz.py -f /home/cyborg/Desktop/datas/Unitree/waist1/B1_-_stand_to_walk_stageii.pkl --input_fps 30
 if __name__ == "__main__":
     # run the main function
     main()

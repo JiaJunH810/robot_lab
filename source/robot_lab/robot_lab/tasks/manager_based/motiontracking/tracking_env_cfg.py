@@ -184,7 +184,7 @@ class EventCfg:
         func=mdp.randomize_rigid_body_com,
         mode="startup",
         params={
-            "asset_cfg": SceneEntityCfg("robot", body_names="waist_yaw_link"),
+            "asset_cfg": SceneEntityCfg("robot", body_names="torso_link"),
             "com_range": {"x": (-0.025, 0.025), "y": (-0.05, 0.05), "z": (-0.05, 0.05)},
         },
     )
@@ -252,7 +252,7 @@ class RewardsCfg:
             "sensor_cfg": SceneEntityCfg(
                 "contact_forces",
                 body_names=[
-                    r"^(?!ankle_l_roll_link$)(?!ankle_r_roll_link$)(?!arm_l_07_link$)(?!arm_r_07_link$).+$"
+                    r"^(?!left_ankle_roll_link$)(?!right_ankle_roll_link$)(?!left_wrist_roll_rubber_hand$)(?!right_wrist_roll_rubber_hand$).+$"
                 ],
             ),
             "threshold": 1.0,
@@ -279,10 +279,10 @@ class TerminationsCfg:
             "command_name": "motion",
             "threshold": 0.25,
             "body_names": [
-                "ankle_l_roll_link",
-                "ankle_r_roll_link",
-                "arm_l_07_link",
-                "arm_r_07_link",
+                "left_ankle_roll_link",
+                "right_ankle_roll_link",
+                "left_wrist_roll_rubber_hand",
+                "right_wrist_roll_rubber_hand",
             ],
         },
     )
