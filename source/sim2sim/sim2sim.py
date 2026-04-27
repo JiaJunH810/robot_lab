@@ -221,7 +221,7 @@ class RobotLabSim2Sim:
         sim_dt = 0.002
         sim_decimation = 10
         timestep = 0
-        anchor_name = "base_link"
+        anchor_name = "pelvis"
         action_buffer = np.zeros((self.num_action, ), dtype=np.float32)
         print(f"帧数: {self.motion_joint_pos.shape[0]}")
 
@@ -275,9 +275,9 @@ class RobotLabSim2Sim:
 # ================= 主程序 =================
 if __name__ == "__main__":
     # 路径配置
-    xml_path = "/home/cyborg/Desktop/projects/robot_lab/source/sim2sim/assets/biped_temp_1_0.xml"
-    motion_file = "/home/cyborg/Desktop/projects/robot_lab/source/robot_lab/robot_lab/tasks/manager_based/motiontracking/config/cyborg/motion/B1_-_stand_to_walk_stageii.npz"
-    policy_path = "/home/cyborg/Desktop/projects/robot_lab/logs/rsl_rl/cyborg_beyondmimic/2026-04-27_10-39-31/exported/policy.onnx"
+    xml_path = "/home/cyborg/Desktop/projects/robot_lab/source/sim2sim/assets/g1_23dof_waist1.xml"
+    motion_file = "/home/cyborg/Desktop/projects/robot_lab/source/robot_lab/robot_lab/tasks/manager_based/motiontracking/config/g1/motion/B1_-_stand_to_walk_stageii.npz"
+    policy_path = "/home/cyborg/Desktop/projects/robot_lab/logs/rsl_rl/unitree_beyondmimic/2026-04-27_14-49-56/exported/policy.onnx"
     
     r = RobotLabSim2Sim(xml_path, motion_file, policy_path)
     r.run()
