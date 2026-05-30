@@ -144,6 +144,7 @@ class RobotLabSim2Sim:
         self.motion_body_quat_w = motion["body_quat_w"]
 
         self.m = mujoco.MjModel.from_xml_path(xml_path)
+        self.m.opt.timestep = 0.001
         self.d = mujoco.MjData(self.m)
         mujoco.mj_resetDataKeyframe(self.m, self.d, 0)
         mujoco.mj_step(self.m, self.d)
@@ -187,10 +188,10 @@ class RobotLabSim2Sim:
                 self.lab_body_names = [x for x in prop.value.split(',')]
         print ("========================== lab parameters ==========================")
         print(f"lab_order: {self.lab_order}")
-        print(f"default_joint_pos: {self.lab_default_joint_pos}")
-        print(f"joint_stiffness: {self.lab_joint_stiffness}")
-        print(f"joint_damping: {self.lab_joint_damping}")
-        print(f"action_scale: {self.lab_action_scale}")
+        print(f"default_joint_pos: {', '.join(map(str, self.lab_default_joint_pos))}")
+        print(f"joint_stiffness: {', '.join(map(str, self.lab_joint_stiffness))}")
+        print(f"joint_damping: {', '.join(map(str, self.lab_joint_damping))}")
+        print(f"action_scale: {', '.join(map(str, self.lab_action_scale))}")
         print(f"body_names: {self.lab_body_names}")
 
         self.xml_to_lab = [self.xml_order.index(joint) for joint in self.lab_order]
@@ -216,10 +217,11 @@ class RobotLabSim2Sim:
 
         return mat[:, :2].flatten()
 
+    obs_count = 0
     def run(self):
         sim_duration = 60.0
-        sim_dt = 0.002
-        sim_decimation = 10
+        sim_dt = 0.001
+        sim_decimation = 20
         timestep = 0
         anchor_name = "base_link"
         action_buffer = np.zeros((self.num_action, ), dtype=np.float32)
@@ -276,8 +278,8 @@ class RobotLabSim2Sim:
 if __name__ == "__main__":
     # 路径配置
     xml_path = "/home/cyborg/Desktop/projects/robot_lab/source/sim2sim/assets/biped_temp_1_0.xml"
-    motion_file = "/home/cyborg/Desktop/projects/robot_lab/source/robot_lab/robot_lab/tasks/manager_based/motiontracking/config/cyborg/motion/B1_-_stand_to_walk_stageii.npz"
-    policy_path = "/home/cyborg/Desktop/projects/robot_lab/logs/rsl_rl/cyborg_beyondmimic/2026-04-27_10-39-31/exported/policy.onnx"
+    motion_file = "/home/cyborg/Desktop/projects/robot_lab/source/robot_lab/robot_lab/tasks/manager_based/motiontracking/config/cyborg/motion/140_08_stageii.npz"
+    policy_path = "/home/cyborg/Desktop/projects/robot_lab/logs/rsl_rl/cyborg_beyondmimic/2026-05-29_14-09-49/exported/policy.onnx"
     
     r = RobotLabSim2Sim(xml_path, motion_file, policy_path)
     r.run()
