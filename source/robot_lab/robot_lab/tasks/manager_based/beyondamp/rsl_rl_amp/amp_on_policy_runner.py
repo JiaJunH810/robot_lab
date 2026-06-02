@@ -16,7 +16,8 @@ from .amp_normalizer import Normalizer
 from .logger import Logger
 from rsl_rl.env import VecEnv
 from rsl_rl.models import MLPModel
-from rsl_rl.utils import check_nan, resolve_obs_groups, resolve_rnd_config, resolve_symmetry_config
+from rsl_rl.utils import check_nan, resolve_obs_groups
+from rsl_rl.extensions import resolve_rnd_config, resolve_symmetry_config
 from rsl_rl.storage import RolloutStorage
 from tensordict import TensorDict
 
