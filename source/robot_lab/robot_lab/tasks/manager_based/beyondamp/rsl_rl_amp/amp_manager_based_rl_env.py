@@ -215,12 +215,12 @@ class AMPManagerBasedRLEnv(ManagerBasedEnv, gym.Env):
         # -- reset envs that terminated/timed-out and log the episode information
         reset_env_ids = self.reset_buf.nonzero(as_tuple=False).squeeze(-1)
         if len(reset_env_ids) > 0:
-            # ★ AMP fix: capture pre-reset amp observation for terminal envs.
+            # ★ AMP fix (Bug #2): capture pre-reset amp observation for terminal envs.
             # IsaacLab auto-resets before returning observations, so obs_dict["amp"]
             # would be the post-reset (new episode) state. By capturing it here, before
             # _reset_idx(), we get the TRUE terminal state for the ReplayBuffer.
             pre_reset_obs = self.observation_manager.compute()
-            self.extras["terminal_amp_states"] = pre_reset_obs["amp"][reset_env_ids]
+            terminal_amp_states = pre_reset_obs["amp"][reset_env_ids]
 
             # trigger recorder terms for pre-reset calls
             self.recorder_manager.record_pre_reset(reset_env_ids)
@@ -234,6 +234,8 @@ class AMPManagerBasedRLEnv(ManagerBasedEnv, gym.Env):
 
             # trigger recorder terms for post-reset calls
             self.recorder_manager.record_post_reset(reset_env_ids)
+        else:
+            terminal_amp_states = None
 
         # -- update command
         self.command_manager.compute(dt=self.step_dt)
@@ -244,8 +246,8 @@ class AMPManagerBasedRLEnv(ManagerBasedEnv, gym.Env):
         # note: done after reset to get the correct observations for reset envs
         self.obs_buf = self.observation_manager.compute(update_history=True)
 
-        # return observations, rewards, resets and extras
-        return self.obs_buf, self.reward_buf, self.reset_terminated, self.reset_time_outs, self.extras
+        # return observations, rewards, resets, extras, and terminal amp states
+        return self.obs_buf, self.reward_buf, self.reset_terminated, self.reset_time_outs, self.extras, terminal_amp_states
 
     def render(self, recompute: bool = False) -> np.ndarray | None:
         """Run rendering without stepping through the physics.

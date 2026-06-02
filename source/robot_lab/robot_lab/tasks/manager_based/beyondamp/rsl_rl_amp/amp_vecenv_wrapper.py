@@ -160,17 +160,13 @@ class AMPRslRlVecEnvWrapper(VecEnv):
         if self.clip_actions is not None:
             actions = torch.clamp(actions, -self.clip_actions, self.clip_actions)
         # record step information
-        obs_dict, rew, terminated, truncated, extras = self.env.step(actions)
+        obs_dict, rew, terminated, truncated, extras, terminal_amp_states = self.env.step(actions)
         # compute dones for compatibility with RSL-RL
         dones = (terminated | truncated).to(dtype=torch.long)
         reset_env_ids = torch.where(dones)[0]
 
-        # ★ AMP fix: read pre-reset terminal amp states from extras (set by
-        # AMPManagerBasedRLEnv before _reset_idx). Fall back to obs_dict["amp"]
-        # (post-reset, broken) for vanilla IsaacLab ManagerBasedRLEnv.
-        if "terminal_amp_states" in extras and extras["terminal_amp_states"] is not None:
-            terminal_amp_states = extras["terminal_amp_states"]
-        else:
+        # fallback for vanilla ManagerBasedRLEnv (no 6th return value)
+        if terminal_amp_states is None:
             terminal_amp_states = obs_dict.get("amp")[reset_env_ids]
 
         # move time out information to the extras dict

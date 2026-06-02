@@ -18,4 +18,4 @@ CYBORG_KEY_BODY_NAMES = [
     "arm_r_07_link",
 ]
 CYBORG_ANCHOR_NAME = "base_link"
-CYBORG_MOTION_FILE = os.path.join(os.path.dirname(__file__), "motion", "140_04_stageii_modify.npz")
+CYBORG_MOTION_FILE = os.path.join(os.path.dirname(__file__), "motion", "B1_-_stand_to_walk_stageii.npz")
