@@ -26,7 +26,7 @@ class CyborgBeyondAMPFlatPPORunnerCfg(RslRlOnPolicyRunnerCfg):
     amp_discr_hidden_dims = [256, 256]
     amp_reward_coef = 0.5
     amp_task_reward_lerp = 0.7
-    amp_min_normalized_std = 0.0
+    amp_min_normalized_std = 0.05
     amp_replay_buffer_size = 100000
 
     policy = RslRlPpoActorCriticCfg(

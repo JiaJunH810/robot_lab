@@ -11,7 +11,7 @@ from . import agents, flat_env_cfg
 
 gym.register(
     id="RobotLab-Isaac-BeyondAMP-Flat-Cyborg",
-    entry_point="isaaclab.envs:ManagerBasedRLEnv",
+    entry_point="robot_lab.tasks.manager_based.beyondamp.rsl_rl_amp.amp_manager_based_rl_env:AMPManagerBasedRLEnv",
     disable_env_checker=True,
     kwargs={
         "env_cfg_entry_point": f"{__name__}.flat_env_cfg:CyborgBeyondAMPFlatEnvCfg",

@@ -46,6 +46,7 @@ class AMPOnPolicyRunner:
             train_cfg['amp_discr_hidden_dims'], device,
             train_cfg['amp_task_reward_lerp']
         ).to(self.device)
+        print(f"Discriminator Model: {discriminator}")
 
         # Create the algorithm
         self.alg = self.construct_algorithm(obs, discriminator, normalizer, self.env, self.cfg, self.device)

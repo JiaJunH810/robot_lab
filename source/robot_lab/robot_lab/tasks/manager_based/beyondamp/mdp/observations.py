@@ -88,13 +88,18 @@ def motion_anchor_ori_b(env: ManagerBasedEnv, command_name: str) -> torch.Tensor
 # ------------------------------ AMP ------------------------------#
 
 def robot_body_pos_w(env: ManagerBasedEnv, command_name: str) -> torch.Tensor:
-    """机器人所有 key body 的世界坐标位置。
+    """机器人所有 key body 的世界坐标位置（减去 env_origin，与专家数据对齐）。
 
     数据已由 MotionCommand.body_indexes 自动过滤到配置的 body_names。
+
+    注意：这里减去 env_origins 是为了和 AMP 专家数据（MotionLoader 从 .npz 加载，
+    录制时 env_origin 在原点附近）保持坐标系一致。否则 4096 个环境分布在 ±80m 范围
+    的 body_pos_w 会和专家数据产生巨大分布偏移，破坏判别器训练。
     Returns: (num_envs, num_key_bodies * 3)
     """
     command: MotionCommand = env.command_manager.get_term(command_name)
-    return command.robot_body_pos_w.view(env.num_envs, -1)
+    pos = command.robot_body_pos_w - env.scene.env_origins.unsqueeze(1)
+    return pos.view(env.num_envs, -1)
 
 
 def robot_body_quat_w(env: ManagerBasedEnv, command_name: str) -> torch.Tensor:

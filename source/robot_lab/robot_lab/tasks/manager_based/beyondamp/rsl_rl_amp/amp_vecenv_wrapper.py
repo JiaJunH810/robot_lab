@@ -8,7 +8,7 @@ import torch
 from rsl_rl.env import VecEnv
 from tensordict import TensorDict
 
-from isaaclab.envs import DirectRLEnv, ManagerBasedRLEnv
+from isaaclab.envs import DirectRLEnv, ManagerBasedEnv
 
 
 class AMPRslRlVecEnvWrapper(VecEnv):
@@ -23,7 +23,7 @@ class AMPRslRlVecEnvWrapper(VecEnv):
         https://github.com/leggedrobotics/rsl_rl/blob/master/rsl_rl/env/vec_env.py
     """
 
-    def __init__(self, env: ManagerBasedRLEnv | DirectRLEnv, clip_actions: float | None = None):
+    def __init__(self, env: ManagerBasedEnv | DirectRLEnv, clip_actions: float | None = None):
         """Initializes the wrapper.
 
         Note:
@@ -34,13 +34,13 @@ class AMPRslRlVecEnvWrapper(VecEnv):
             clip_actions: The clipping value for actions. If ``None``, then no clipping is done.
 
         Raises:
-            ValueError: When the environment is not an instance of :class:`ManagerBasedRLEnv` or :class:`DirectRLEnv`.
+            ValueError: When the environment is not an instance of :class:`ManagerBasedEnv` or :class:`DirectRLEnv`.
         """
 
         # check that input is valid
-        if not isinstance(env.unwrapped, ManagerBasedRLEnv) and not isinstance(env.unwrapped, DirectRLEnv):
+        if not isinstance(env.unwrapped, ManagerBasedEnv) and not isinstance(env.unwrapped, DirectRLEnv):
             raise ValueError(
-                "The environment must be inherited from ManagerBasedRLEnv or DirectRLEnv. Environment type:"
+                "The environment must be inherited from ManagerBasedEnv or DirectRLEnv. Environment type:"
                 f" {type(env)}"
             )
 
@@ -103,7 +103,7 @@ class AMPRslRlVecEnvWrapper(VecEnv):
         return cls.__name__
 
     @property
-    def unwrapped(self) -> ManagerBasedRLEnv | DirectRLEnv:
+    def unwrapped(self) -> ManagerBasedEnv | DirectRLEnv:
         """Returns the base environment of the wrapper.
 
         This will be the bare :class:`gymnasium.Env` environment, underneath all layers of wrappers.
@@ -163,14 +163,22 @@ class AMPRslRlVecEnvWrapper(VecEnv):
         obs_dict, rew, terminated, truncated, extras = self.env.step(actions)
         # compute dones for compatibility with RSL-RL
         dones = (terminated | truncated).to(dtype=torch.long)
-        terminal_amp_states = obs_dict.get("amp")
         reset_env_ids = torch.where(dones)[0]
+
+        # ★ AMP fix: read pre-reset terminal amp states from extras (set by
+        # AMPManagerBasedRLEnv before _reset_idx). Fall back to obs_dict["amp"]
+        # (post-reset, broken) for vanilla IsaacLab ManagerBasedRLEnv.
+        if "terminal_amp_states" in extras and extras["terminal_amp_states"] is not None:
+            terminal_amp_states = extras["terminal_amp_states"]
+        else:
+            terminal_amp_states = obs_dict.get("amp")[reset_env_ids]
+
         # move time out information to the extras dict
         # this is only needed for infinite horizon tasks
         if not self.unwrapped.cfg.is_finite_horizon:
             extras["time_outs"] = truncated
         # return the step information
-        return TensorDict(obs_dict, batch_size=[self.num_envs]), rew, dones, extras, reset_env_ids, terminal_amp_states[reset_env_ids]
+        return TensorDict(obs_dict, batch_size=[self.num_envs]), rew, dones, extras, reset_env_ids, terminal_amp_states
 
     def close(self):  # noqa: D102
         return self.env.close()
