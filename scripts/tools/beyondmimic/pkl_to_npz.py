@@ -387,7 +387,7 @@ def main():
 
         run_simulator(motion, sim, scene)
 
-# python scripts/tools/beyondmimic/pkl_to_npz.py -f /home/cyborg/Desktop/datas/Cyborg/motion/CMU/140 --input_fps 30
+# python scripts/tools/beyondmimic/pkl_to_npz.py -f /home/cyborg/Desktop/datas/Cyborg/motion/CMU/140/140_04_stageii_modify.pkl --input_fps 30
 if __name__ == "__main__":
     # run the main function
     main()

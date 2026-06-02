@@ -85,8 +85,11 @@ from datetime import datetime
 
 import gymnasium as gym
 import torch
-from rsl_rl.runners import DistillationRunner, OnPolicyRunner
+from rsl_rl.runners import DistillationRunner
 from runner import Runner
+
+# beyondAMP: AMPOnPolicyRunner（带判别器 + AMPPPO 的训练循环）"""
+from robot_lab.tasks.manager_based.beyondamp.rsl_rl_amp.amp_on_policy_runner import AMPOnPolicyRunner  # noqa: F401
 
 from isaaclab.envs import (
     DirectMARLEnv,
@@ -99,6 +102,9 @@ from isaaclab.utils.dict import print_dict
 from isaaclab.utils.io import dump_yaml
 
 from isaaclab_rl.rsl_rl import RslRlBaseRunnerCfg, RslRlVecEnvWrapper, handle_deprecated_rsl_rl_cfg
+
+# beyondAMP: AMP vecenv wrapper（备用，AMP 任务自动切换）
+from robot_lab.tasks.manager_based.beyondamp.rsl_rl_amp.amp_vecenv_wrapper import AMPRslRlVecEnvWrapper  # noqa: F401
 
 from isaaclab_tasks.utils import get_checkpoint_path
 from isaaclab_tasks.utils.hydra import hydra_task_config
@@ -200,11 +206,15 @@ def main(env_cfg: ManagerBasedRLEnvCfg | DirectRLEnvCfg | DirectMARLEnvCfg, agen
     start_time = time.time()
 
     # wrap around environment for rsl-rl
-    env = RslRlVecEnvWrapper(env, clip_actions=agent_cfg.clip_actions)
+    # 如果 runner cfg 指定了 runner_type（如 AMPOnPolicyRunner），自动切 AMP wrapper
+    wrapper_cls = getattr(agent_cfg, "wrapper_type", None) or RslRlVecEnvWrapper
+    env = wrapper_cls(env, clip_actions=agent_cfg.clip_actions)
 
     # create runner from rsl-rl
     if agent_cfg.class_name == "OnPolicyRunner":
-        runner = Runner(env, agent_cfg.to_dict(), log_dir=log_dir, device=agent_cfg.device)
+        # 优先使用 config 中指定的自定义 runner_type（如 AMPOnPolicyRunner）
+        runner_cls = getattr(agent_cfg, "runner_type", None) or Runner
+        runner = runner_cls(env, agent_cfg.to_dict(), log_dir=log_dir, device=agent_cfg.device)
     elif agent_cfg.class_name == "DistillationRunner":
         runner = DistillationRunner(env, agent_cfg.to_dict(), log_dir=log_dir, device=agent_cfg.device)
     else:

@@ -16,7 +16,7 @@ class CyborgBeyondMimicFlatEnvCfg(CyborgEnvCfg):
 
         self.scene.robot = CYBORG_BIPED_CFG.replace(prim_path="{ENV_REGEX_NS}/Robot")
         self.actions.joint_pos.scale = CYBORG_BIPED_ACTION_SCALE
-        self.commands.motion.motion_file = f"{os.path.dirname(__file__)}/motion/140_01_stageii.npz"
+        self.commands.motion.motion_file = f"{os.path.dirname(__file__)}/motion/140_04_stageii_modify.npz"
         self.commands.motion.anchor_body_name = "base_link"
         self.commands.motion.body_names = [
             "base_link",
