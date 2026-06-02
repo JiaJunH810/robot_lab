@@ -20,6 +20,8 @@ from rsl_rl.utils import check_nan, resolve_callable, resolve_obs_groups
 from rsl_rl.extensions import resolve_rnd_config, resolve_symmetry_config
 from rsl_rl.storage import RolloutStorage
 from tensordict import TensorDict
+import statistics
+
 
 class AMPOnPolicyRunner:
     """On-policy runner for reinforcement learning algorithms."""
@@ -89,6 +91,7 @@ class AMPOnPolicyRunner:
         # Start training
         start_it = self.current_learning_iteration
         total_it = start_it + num_learning_iterations
+        greater_episode = 0
         for it in range(start_it, total_it):
             start = time.time()
             # Rollout
@@ -148,8 +151,12 @@ class AMPOnPolicyRunner:
             )
 
             # Save model
-            if self.logger.writer is not None and it % self.cfg["save_interval"] == 0:
-                self.save(os.path.join(self.logger.log_dir, f"model_{it}.pt"))  # type: ignore
+            # if self.logger.writer is not None and it % self.cfg["save_interval"] == 0:
+            #     self.save(os.path.join(self.logger.log_dir, f"model_{it}.pt"))  # type: ignore
+
+            if statistics.mean(self.logger.lenbuffer) > greater_episode:
+                greater_episode = statistics.mean(self.logger.lenbuffer)
+                self.save(os.path.join(self.logger.log_dir, f"greater_episode.pt"))
 
         # Save the final model after training and stop the logging writer
         if self.logger.writer is not None:
