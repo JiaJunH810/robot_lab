@@ -362,8 +362,14 @@ class MotionCommand(CommandTerm):
         expert_t_parts, expert_tp1_parts = [], []
         for term_name in self.cfg.amp_obs_terms:
             data = getattr(self.motion, term_name)
-            expert_t_parts.append(data[t_global])
-            expert_tp1_parts.append(data[next_t_global])
+            expert_t_part = data[t_global]
+            expert_tp1_part = data[next_t_global]
+            # Flatten body terms (3D) to 2D for concatenation
+            if expert_t_part.dim() > 2:
+                expert_t_part = expert_t_part.view(expert_t_part.shape[0], -1)
+                expert_tp1_part = expert_tp1_part.view(expert_tp1_part.shape[0], -1)
+            expert_t_parts.append(expert_t_part)
+            expert_tp1_parts.append(expert_tp1_part)
         return torch.cat(expert_t_parts, dim=-1), torch.cat(expert_tp1_parts, dim=-1)
 
     def _set_debug_vis_impl(self, debug_vis: bool):
