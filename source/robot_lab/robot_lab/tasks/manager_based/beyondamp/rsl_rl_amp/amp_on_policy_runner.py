@@ -320,6 +320,7 @@ class AMPOnPolicyRunner:
             actor, critic, discriminator, normalizer, storage,
             device=device,
             amp_min_normalized_std=amp_min_normalized_std,
+            amp_replay_buffer_size=cfg.get("amp_replay_buffer_size", 100000),
             **cfg["algorithm"],
             multi_gpu_cfg=cfg["multi_gpu"],
         )

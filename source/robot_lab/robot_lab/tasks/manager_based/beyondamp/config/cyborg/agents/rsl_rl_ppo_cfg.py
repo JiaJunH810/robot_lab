@@ -27,6 +27,7 @@ class CyborgBeyondAMPFlatPPORunnerCfg(RslRlOnPolicyRunnerCfg):
     amp_reward_coef = 0.5
     amp_task_reward_lerp = 0.7
     amp_min_normalized_std = 0.0
+    amp_replay_buffer_size = 100000
 
     policy = RslRlPpoActorCriticCfg(
         init_noise_std=1.0,
@@ -38,8 +39,6 @@ class CyborgBeyondAMPFlatPPORunnerCfg(RslRlOnPolicyRunnerCfg):
     )
     algorithm = RslRlPpoAlgorithmCfg(
         class_name = "rsl_rl_amp.amp_ppo:AMPPPO",
-        amp_replay_buffer_size = 100000,
-
         value_loss_coef=1.0,
         use_clipped_value_loss=True,
         clip_param=0.2,
