@@ -17,9 +17,9 @@ from rsl_rl.extensions import RandomNetworkDistillation, resolve_rnd_config, res
 from rsl_rl.models import MLPModel
 from rsl_rl.storage import RolloutStorage
 from rsl_rl.utils import resolve_callable, resolve_obs_groups, resolve_optimizer
-from rsl_rl_amp.amp_discriminator import AMPDiscriminator
-from rsl_rl_amp.replay_buffer import ReplayBuffer
-from rsl_rl_amp.amp_normalizer import Normalizer
+from .amp_discriminator import AMPDiscriminator
+from .replay_buffer import ReplayBuffer
+from .amp_normalizer import Normalizer
 
 class AMPPPO:
     """Proximal Policy Optimization algorithm.

@@ -10,10 +10,10 @@ import os
 import time
 import torch
 
-from rsl_rl_amp.amp_ppo import AMPPPO
-from rsl_rl_amp.amp_discriminator import AMPDiscriminator
-from rsl_rl_amp.amp_normalizer import Normalizer
-from rsl_rl_amp.logger import Logger
+from .amp_ppo import AMPPPO
+from .amp_discriminator import AMPDiscriminator
+from .amp_normalizer import Normalizer
+from .logger import Logger
 from rsl_rl.env import VecEnv
 from rsl_rl.models import MLPModel
 from rsl_rl.utils import check_nan, resolve_obs_groups, resolve_rnd_config, resolve_symmetry_config
