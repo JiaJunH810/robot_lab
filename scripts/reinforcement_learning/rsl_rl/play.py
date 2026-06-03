@@ -103,6 +103,10 @@ sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 from rl_utils import camera_follow
 from robot_lab.utils.exporter import attach_onnx_metadata
 
+# AMP imports for beyondAMP checkpoints
+from robot_lab.tasks.manager_based.beyondamp.rsl_rl_amp.amp_on_policy_runner import AMPOnPolicyRunner
+from robot_lab.tasks.manager_based.beyondamp.rsl_rl_amp.amp_vecenv_wrapper import AMPRslRlVecEnvWrapper
+
 # PLACEHOLDER: Extension template (do not remove this comment)
 
 
@@ -192,18 +196,19 @@ def main(env_cfg: ManagerBasedRLEnvCfg | DirectRLEnvCfg | DirectMARLEnvCfg, agen
         print_dict(video_kwargs, nesting=4)
         env = gym.wrappers.RecordVideo(env, **video_kwargs)
 
-    # wrap around environment for rsl-rl
-    env = RslRlVecEnvWrapper(env, clip_actions=agent_cfg.clip_actions)
+    # wrap around environment for rsl-rl — follow train.py pattern
+    wrapper_cls = getattr(agent_cfg, "wrapper_type", None) or RslRlVecEnvWrapper
+    env = wrapper_cls(env, clip_actions=agent_cfg.clip_actions)
 
     print(f"[INFO]: Loading model checkpoint from: {resume_path}")
-    # load previously trained model
-    if agent_cfg.class_name == "OnPolicyRunner":
-        runner = Runner(env, agent_cfg.to_dict(), log_dir=None, device=agent_cfg.device)
-    elif agent_cfg.class_name == "DistillationRunner":
-        runner = DistillationRunner(env, agent_cfg.to_dict(), log_dir=None, device=agent_cfg.device)
-    else:
-        raise ValueError(f"Unsupported runner class: {agent_cfg.class_name}")
-    runner.load(resume_path)
+    runner_cls = getattr(agent_cfg, "runner_type", None) or Runner
+    runner = runner_cls(env, agent_cfg.to_dict(), log_dir=log_dir, device=agent_cfg.device)
+    # Play only needs the actor. Skip optimizer (param-group mismatch for AMP) and
+    # discriminator/normalizer (may have dimension mismatch with play config).
+    runner.load(resume_path, load_cfg={
+        "actor": True, "critic": False, "optimizer": False,
+        "discriminator": False, "amp_normalizer": False,
+    })
 
     # obtain the trained policy for inference
     policy = runner.get_inference_policy(device=env.unwrapped.device)
@@ -248,7 +253,7 @@ def main(env_cfg: ManagerBasedRLEnvCfg | DirectRLEnvCfg | DirectMARLEnvCfg, agen
             # agent stepping
             actions = policy(obs)
             # env stepping
-            obs, _, dones, _ = env.step(actions)
+            obs, _, dones, *_ = env.step(actions)
             # reset recurrent states for episodes that have terminated
             if version.parse(installed_version) >= version.parse("4.0.0"):
                 policy.reset(dones)

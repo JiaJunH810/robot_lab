@@ -62,7 +62,11 @@ from isaaclab.scene import InteractiveScene, InteractiveSceneCfg
 from isaaclab.sim import SimulationContext
 from isaaclab.utils import configclass
 from isaaclab.utils.assets import ISAAC_NUCLEUS_DIR
-from isaaclab.utils.math import axis_angle_from_quat, quat_conjugate, quat_mul, quat_slerp
+from isaaclab.utils.math import (
+    axis_angle_from_quat, matrix_from_quat,
+    quat_apply_inverse, quat_conjugate, quat_mul,
+    quat_slerp, subtract_frame_transforms,
+)
 
 ##
 # Pre-defined configs
@@ -282,6 +286,7 @@ def run_simulator(motion_file, sim: sim_utils.SimulationContext, scene: Interact
         "J_arm_r_07",
     ]
     robot_joint_indexes = robot.find_joints(joint_sdk_names, preserve_order=True)[0]
+    anchor_body_idx = robot.body_names.index("base_link")
 
     # ------- data logger -------------------------------------------------------
     log = {
@@ -292,7 +297,11 @@ def run_simulator(motion_file, sim: sim_utils.SimulationContext, scene: Interact
         "body_quat_w": [],
         "body_lin_vel_w": [],
         "body_ang_vel_w": [],
-        "body_pos_r": []
+        "body_pos_b": [],
+        "body_quat_b": [],
+        "body_ori_b": [],
+        "body_lin_vel_b": [],
+        "body_ang_vel_b": [],
     }
     file_saved = False
     # --------------------------------------------------------------------------
@@ -342,6 +351,31 @@ def run_simulator(motion_file, sim: sim_utils.SimulationContext, scene: Interact
             log["body_lin_vel_w"].append(robot.data.body_lin_vel_w[0, :].cpu().numpy().copy())
             log["body_ang_vel_w"].append(robot.data.body_ang_vel_w[0, :].cpu().numpy().copy())
 
+            # Compute body-frame (b) data relative to anchor body
+            anchor_pos = robot.data.body_pos_w[0, anchor_body_idx]
+            anchor_quat = robot.data.body_quat_w[0, anchor_body_idx]
+            body_pos_w = robot.data.body_pos_w[0]
+            body_quat_w = robot.data.body_quat_w[0]
+            body_lin_vel_w = robot.data.body_lin_vel_w[0]
+            body_ang_vel_w = robot.data.body_ang_vel_w[0]
+            num_bodies = body_pos_w.shape[0]
+
+            pos_b, quat_b = subtract_frame_transforms(
+                anchor_pos[None, :].repeat(num_bodies, 1),
+                anchor_quat[None, :].repeat(num_bodies, 1),
+                body_pos_w,
+                body_quat_w,
+            )
+            log["body_pos_b"].append(pos_b.cpu().numpy().copy())
+            log["body_quat_b"].append(quat_b.cpu().numpy().copy())
+            mat = matrix_from_quat(quat_b)
+            log["body_ori_b"].append(mat[..., :2].reshape(num_bodies, -1).cpu().numpy().copy())
+
+            vel_b = quat_apply_inverse(body_quat_w, body_lin_vel_w)
+            log["body_lin_vel_b"].append(vel_b.cpu().numpy().copy())
+            ang_b = quat_apply_inverse(body_quat_w, body_ang_vel_w)
+            log["body_ang_vel_b"].append(ang_b.cpu().numpy().copy())
+
         if reset_flag and not file_saved:
             file_saved = True
             for k in (
@@ -351,7 +385,11 @@ def run_simulator(motion_file, sim: sim_utils.SimulationContext, scene: Interact
                 "body_quat_w",
                 "body_lin_vel_w",
                 "body_ang_vel_w",
-                # "body_pos_r",
+                "body_pos_b",
+                "body_quat_b",
+                "body_ori_b",
+                "body_lin_vel_b",
+                "body_ang_vel_b",
             ):
                 log[k] = np.stack(log[k], axis=0)
 
@@ -387,7 +425,7 @@ def main():
 
         run_simulator(motion, sim, scene)
 
-# python scripts/tools/beyondmimic/pkl_to_npz.py -f /home/cyborg/Desktop/datas/Cyborg/motion/CMU/140/140_04_stageii_modify.pkl --input_fps 30
+# python scripts/tools/beyondmimic/pkl_to_npz.py -f /home/cyborg/Desktop/datas/Cyborg/motion/ACCAD/Female1Walking_c3d/B1_-_stand_to_walk_stageii.pkl --input_fps 30
 if __name__ == "__main__":
     # run the main function
     main()
