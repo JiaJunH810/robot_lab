@@ -153,6 +153,8 @@ class AMPRslRlVecEnvWrapper(VecEnv):
             obs_dict = self.unwrapped.observation_manager.compute()
         else:
             obs_dict = self.unwrapped._get_observations()
+        if "amp" not in obs_dict:
+            return torch.zeros(self.num_envs, 0, device=self.device)
         return obs_dict["amp"]
 
     def step(self, actions: torch.Tensor) -> tuple[TensorDict, torch.Tensor, torch.Tensor, dict]:

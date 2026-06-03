@@ -8,7 +8,6 @@ from isaaclab.utils import configclass
 from robot_lab.assets.cyborg import CYBORG_BIPED_ACTION_SCALE, CYBORG_BIPED_CFG
 from robot_lab.tasks.manager_based.beyondamp.tracking_env_cfg import CyborgEnvCfg
 import robot_lab.tasks.manager_based.beyondamp.obs_groups as amp_groups
-import robot_lab.tasks.manager_based.beyondamp.config.cyborg.cyborg_params as params
 
 
 @configclass
@@ -24,8 +23,15 @@ class CyborgBeyondAMPFlatEnvCfg(CyborgEnvCfg):
 
         self.scene.robot = CYBORG_BIPED_CFG.replace(prim_path="{ENV_REGEX_NS}/Robot")
         self.actions.joint_pos.scale = CYBORG_BIPED_ACTION_SCALE
-        self.commands.motion.motion_file = params.CYBORG_MOTION_FILE
-        self.commands.motion.anchor_body_name = params.CYBORG_ANCHOR_NAME
-        self.commands.motion.body_names = params.CYBORG_KEY_BODY_NAMES
+        self.commands.motion.motion_file = f"{os.path.dirname(__file__)}/motion/B1_-_stand_to_walk_stageii.npz"
+        self.commands.motion.anchor_body_name = "base_link"
+        self.commands.motion.body_names = [
+            "base_link",
+            "hip_l_roll_link", "knee_l_pitch_link", "ankle_l_roll_link",
+            "hip_r_roll_link", "knee_r_pitch_link", "ankle_r_roll_link",
+            "waist_yaw_link",
+            "arm_l_02_link", "arm_l_04_link", "arm_l_07_link",
+            "arm_r_02_link", "arm_r_04_link", "arm_r_07_link",
+        ]
         self.commands.motion.amp_obs_terms = amp_groups.AMPObsHardTrackTerms
         self.episode_length_s = 30.0

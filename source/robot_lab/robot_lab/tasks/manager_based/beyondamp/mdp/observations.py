@@ -6,7 +6,7 @@ from __future__ import annotations
 import torch
 from typing import TYPE_CHECKING
 
-from isaaclab.utils.math import matrix_from_quat, subtract_frame_transforms
+from isaaclab.utils.math import matrix_from_quat, quat_apply_inverse, subtract_frame_transforms
 
 from robot_lab.tasks.manager_based.beyondamp.mdp.commands import MotionCommand
 
@@ -85,45 +85,38 @@ def motion_anchor_ori_b(env: ManagerBasedEnv, command_name: str) -> torch.Tensor
     mat = matrix_from_quat(ori)
     return mat[..., :2].reshape(mat.shape[0], -1)
 
-# ------------------------------ AMP ------------------------------#
+# ------------------------------ AMP: body-frame velocities ------------------------------#
 
-def robot_body_pos_w(env: ManagerBasedEnv, command_name: str) -> torch.Tensor:
-    """机器人所有 key body 的世界坐标位置（减去 env_origin，与专家数据对齐）。
+def robot_body_lin_vel_b(env: ManagerBasedEnv, command_name: str) -> torch.Tensor:
+    """机器人所有 key body 在本体系的线速度 (matching AMP_mjlab).
 
-    数据已由 MotionCommand.body_indexes 自动过滤到配置的 body_names。
-
-    注意：这里减去 env_origins 是为了和 AMP 专家数据（MotionLoader 从 .npz 加载，
-    录制时 env_origin 在原点附近）保持坐标系一致。否则 4096 个环境分布在 ±80m 范围
-    的 body_pos_w 会和专家数据产生巨大分布偏移，破坏判别器训练。
+    对 world 系速度做 quat_apply_inverse(body_quat_w) 转到各身体的局部坐标系。
     Returns: (num_envs, num_key_bodies * 3)
     """
     command: MotionCommand = env.command_manager.get_term(command_name)
-    pos = command.robot_body_pos_w - env.scene.env_origins.unsqueeze(1)
-    return pos.view(env.num_envs, -1)
+    body_lin_vel_w = command.robot_body_lin_vel_w
+    body_quat_w = command.robot_body_quat_w
+
+    num_bodies, num_envs_ = body_lin_vel_w.shape[1], env.num_envs
+    body_lin_vel_b = quat_apply_inverse(
+        body_quat_w.reshape(-1, 4),
+        body_lin_vel_w.reshape(-1, 3),
+    ).reshape(num_envs_, num_bodies, 3)
+    return body_lin_vel_b.reshape(num_envs_, -1)
 
 
-def robot_body_quat_w(env: ManagerBasedEnv, command_name: str) -> torch.Tensor:
-    """机器人所有 key body 的世界坐标朝向（四元数）。
-
-    Returns: (num_envs, num_key_bodies * 4)
-    """
-    command: MotionCommand = env.command_manager.get_term(command_name)
-    return command.robot_body_quat_w.view(env.num_envs, -1)
-
-
-def robot_body_lin_vel_w(env: ManagerBasedEnv, command_name: str) -> torch.Tensor:
-    """机器人所有 key body 的世界坐标线速度。
+def robot_body_ang_vel_b(env: ManagerBasedEnv, command_name: str) -> torch.Tensor:
+    """机器人所有 key body 在本体系的角速度 (matching AMP_mjlab).
 
     Returns: (num_envs, num_key_bodies * 3)
     """
     command: MotionCommand = env.command_manager.get_term(command_name)
-    return command.robot_body_lin_vel_w.view(env.num_envs, -1)
+    body_ang_vel_w = command.robot_body_ang_vel_w
+    body_quat_w = command.robot_body_quat_w
 
-
-def robot_body_ang_vel_w(env: ManagerBasedEnv, command_name: str) -> torch.Tensor:
-    """机器人所有 key body 的世界坐标角速度。
-
-    Returns: (num_envs, num_key_bodies * 3)
-    """
-    command: MotionCommand = env.command_manager.get_term(command_name)
-    return command.robot_body_ang_vel_w.view(env.num_envs, -1)
+    num_bodies, num_envs_ = body_ang_vel_w.shape[1], env.num_envs
+    body_ang_vel_b = quat_apply_inverse(
+        body_quat_w.reshape(-1, 4),
+        body_ang_vel_w.reshape(-1, 3),
+    ).reshape(num_envs_, num_bodies, 3)
+    return body_ang_vel_b.reshape(num_envs_, -1)

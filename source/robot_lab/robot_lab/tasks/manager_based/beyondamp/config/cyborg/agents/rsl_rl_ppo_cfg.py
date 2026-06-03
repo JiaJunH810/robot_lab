@@ -3,14 +3,7 @@
 
 from isaaclab.utils import configclass
 from isaaclab_rl.rsl_rl import RslRlOnPolicyRunnerCfg, RslRlPpoActorCriticCfg, RslRlPpoAlgorithmCfg
-from dataclasses import MISSING
-from typing import List
 
-from robot_lab.tasks.manager_based.beyondamp.config.cyborg.cyborg_params import (
-    CYBORG_KEY_BODY_NAMES,
-    CYBORG_ANCHOR_NAME,
-    CYBORG_MOTION_FILE,
-)
 from robot_lab.tasks.manager_based.beyondamp.rsl_rl_amp.amp_on_policy_runner import AMPOnPolicyRunner
 from robot_lab.tasks.manager_based.beyondamp.rsl_rl_amp.amp_vecenv_wrapper import AMPRslRlVecEnvWrapper
 

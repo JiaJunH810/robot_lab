@@ -47,6 +47,11 @@ class MotionLoader:
         self._body_quat_w = []
         self._body_lin_vel_w = []
         self._body_ang_vel_w = []
+        self._body_pos_b = []
+        self._body_quat_b = []
+        self._body_ori_b = []
+        self._body_lin_vel_b = []
+        self._body_ang_vel_b = []
         self.num_motions = len(self.files)
 
         for motion_file in self.files:
@@ -58,15 +63,25 @@ class MotionLoader:
             self._body_quat_w.append(torch.tensor(data["body_quat_w"], dtype=torch.float32, device=device))
             self._body_lin_vel_w.append(torch.tensor(data["body_lin_vel_w"], dtype=torch.float32, device=device))
             self._body_ang_vel_w.append(torch.tensor(data["body_ang_vel_w"], dtype=torch.float32, device=device))
+            self._body_pos_b.append(torch.tensor(data["body_pos_b"], dtype=torch.float32, device=device))
+            self._body_quat_b.append(torch.tensor(data["body_quat_b"], dtype=torch.float32, device=device))
+            self._body_ori_b.append(torch.tensor(data["body_ori_b"], dtype=torch.float32, device=device))
+            self._body_lin_vel_b.append(torch.tensor(data["body_lin_vel_b"], dtype=torch.float32, device=device))
+            self._body_ang_vel_b.append(torch.tensor(data["body_ang_vel_b"], dtype=torch.float32, device=device))
             self.time_step_total.append(data['joint_pos'].shape[0])
         self._body_indexes = body_indexes
-        
+
         self.joint_pos = torch.cat(self.joint_pos, dim=0)
         self.joint_vel = torch.cat(self.joint_vel, dim=0)
         self._body_pos_w = torch.cat(self._body_pos_w, dim=0)
         self._body_quat_w = torch.cat(self._body_quat_w, dim=0)
         self._body_lin_vel_w = torch.cat(self._body_lin_vel_w, dim=0)
         self._body_ang_vel_w = torch.cat(self._body_ang_vel_w, dim=0)
+        self._body_pos_b = torch.cat(self._body_pos_b, dim=0)
+        self._body_quat_b = torch.cat(self._body_quat_b, dim=0)
+        self._body_ori_b = torch.cat(self._body_ori_b, dim=0)
+        self._body_lin_vel_b = torch.cat(self._body_lin_vel_b, dim=0)
+        self._body_ang_vel_b = torch.cat(self._body_ang_vel_b, dim=0)
         self.time_step_total = torch.tensor(self.time_step_total, device=device, dtype=torch.long)
         self.motion_starts = torch.cat([torch.tensor([0], device=device), torch.cumsum(self.time_step_total, dim=0)[:-1]])
 
@@ -85,6 +100,26 @@ class MotionLoader:
     @property
     def body_ang_vel_w(self) -> torch.Tensor:
         return self._body_ang_vel_w[:, self._body_indexes]
+
+    @property
+    def body_pos_b(self) -> torch.Tensor:
+        return self._body_pos_b[:, self._body_indexes]
+
+    @property
+    def body_quat_b(self) -> torch.Tensor:
+        return self._body_quat_b[:, self._body_indexes]
+
+    @property
+    def body_lin_vel_b(self) -> torch.Tensor:
+        return self._body_lin_vel_b[:, self._body_indexes]
+
+    @property
+    def body_ori_b(self) -> torch.Tensor:
+        return self._body_ori_b[:, self._body_indexes]
+
+    @property
+    def body_ang_vel_b(self) -> torch.Tensor:
+        return self._body_ang_vel_b[:, self._body_indexes]
 
 
 class MotionCommand(CommandTerm):
