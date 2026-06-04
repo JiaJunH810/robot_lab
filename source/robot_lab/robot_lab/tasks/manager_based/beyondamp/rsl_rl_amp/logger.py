@@ -60,8 +60,12 @@ class Logger:
         if self.cfg.get("amp_reward_coef"):
             self.ampbuffer = deque(maxlen=100)
             self.discribuffer = deque(maxlen=100)
+            self.taskbuffer = deque(maxlen=100)
+            self.totbuffer = deque(maxlen=100)
             self.cur_amp_sum = torch.zeros(self.num_envs, dtype=torch.float, device=self.device)
             self.cur_discri_sum = torch.zeros(self.num_envs, dtype=torch.float, device=self.device)
+            self.cur_task_reward_sum = torch.zeros(self.num_envs, dtype=torch.float, device=self.device)
+            self.cur_tot_reward_sum = torch.zeros(self.num_envs, dtype=torch.float, device=self.device)
 
         # Decide whether to disable logging
         # Note: We only log from the process with rank 0 (main process)
@@ -109,6 +113,8 @@ class Logger:
         intrinsic_rewards: torch.Tensor | None = None,
         amp_rewards: torch.Tensor | None = None,
         discri_logits: torch.Tensor | None = None,
+        task_rewards: torch.Tensor | None = None,
+        total_rewards: torch.Tensor | None = None,
     ) -> None:
         """Add metrics from the environment step to the buffers."""
         if self.writer is not None:
@@ -131,6 +137,10 @@ class Logger:
                 self.cur_amp_sum += amp_rewards
             if discri_logits is not None:
                 self.cur_discri_sum += discri_logits
+            if task_rewards is not None:
+                self.cur_task_reward_sum += task_rewards
+            if total_rewards is not None:
+                self.cur_tot_reward_sum += total_rewards
 
             # Clear data for completed episodes
             new_ids = (dones > 0).nonzero(as_tuple=False)
@@ -149,6 +159,12 @@ class Logger:
             if discri_logits is not None:
                 self.discribuffer.extend(self.cur_discri_sum[new_ids][:, 0].cpu().numpy().tolist())
                 self.cur_discri_sum[new_ids] = 0
+            if task_rewards is not None:
+                self.taskbuffer.extend(self.cur_task_reward_sum[new_ids][:, 0].cpu().numpy().tolist())
+                self.cur_task_reward_sum[new_ids] = 0
+            if total_rewards is not None:
+                self.totbuffer.extend(self.cur_tot_reward_sum[new_ids][:, 0].cpu().numpy().tolist())
+                self.cur_tot_reward_sum[new_ids] = 0
 
     def log(
         self,
@@ -231,7 +247,9 @@ class Logger:
             # Log AMP metrics
             if self.cfg.get("amp_reward_coef"):
                 if len(self.ampbuffer) > 0:
+                    self.writer.add_scalar("Amp/mean_task_reward", statistics.mean(self.taskbuffer), it)
                     self.writer.add_scalar("Amp/mean_amp_reward", statistics.mean(self.ampbuffer), it)
+                    self.writer.add_scalar("Amp/mean_total_reward", statistics.mean(self.totbuffer), it)
                     self.writer.add_scalar("Amp/mean_discri_logits", statistics.mean(self.discribuffer), it)
 
             # Print to console
@@ -264,7 +282,9 @@ class Logger:
             # Print AMP metrics
             if self.cfg.get("amp_reward_coef"):
                 if len(self.ampbuffer) > 0:
+                    log_string += f"""{"Mean task reward:":>{pad}} {statistics.mean(self.taskbuffer):.2f}\n"""
                     log_string += f"""{"Mean amp reward:":>{pad}} {statistics.mean(self.ampbuffer):.2f}\n"""
+                    log_string += f"""{"Mean total reward:":>{pad}} {statistics.mean(self.totbuffer):.2f}\n"""
                     log_string += f"""{"Mean discri logits:":>{pad}} {statistics.mean(self.discribuffer):.2f}\n"""
 
             # Print std

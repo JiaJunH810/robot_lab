@@ -121,7 +121,7 @@ class AMPOnPolicyRunner:
                     # Extract intrinsic rewards if RND is used (only for logging)
                     intrinsic_rewards = self.alg.intrinsic_rewards if self.cfg["algorithm"]["rnd_cfg"] else None
                     # Book keeping
-                    self.logger.process_env_step(rewards, dones, extras, intrinsic_rewards, amp_rewards, d_logits)
+                    self.logger.process_env_step(rewards, dones, extras, intrinsic_rewards, amp_rewards, d_logits, task_rewards=rewards, total_rewards=lerp_rewards)
 
                 stop = time.time()
                 collect_time = stop - start

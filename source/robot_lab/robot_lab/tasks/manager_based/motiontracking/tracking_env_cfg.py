@@ -185,6 +185,16 @@ class EventCfg:
         },
     )
 
+    # delayed termination — gives delay envs extra steps to recover after a fall
+    install_delayed_termination = EventTerm(
+        func=mdp.install_delayed_termination,
+        mode="startup",
+        params={
+            "delay_env_ratio": 0.4,
+            "max_delay_steps": 250,
+        },
+    )
+
     # interval
     randomize_push_robot = EventTerm(
         func=mdp.push_by_setting_velocity,

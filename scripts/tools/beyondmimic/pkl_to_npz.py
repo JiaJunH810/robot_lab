@@ -293,6 +293,7 @@ def run_simulator(motion_file, sim: sim_utils.SimulationContext, scene: Interact
         "fps": [args_cli.output_fps],
         "joint_pos": [],
         "joint_vel": [],
+        "joint_names": list(robot.joint_names),
         "body_pos_w": [],
         "body_quat_w": [],
         "body_lin_vel_w": [],
@@ -425,7 +426,7 @@ def main():
 
         run_simulator(motion, sim, scene)
 
-# python scripts/tools/beyondmimic/pkl_to_npz.py -f /home/cyborg/Desktop/datas/Cyborg/motion/ACCAD/Female1Walking_c3d/B1_-_stand_to_walk_stageii.pkl --input_fps 30
+# python scripts/tools/beyondmimic/pkl_to_npz.py -f /home/cyborg/Desktop/datas/Cyborg/motion/Lafan/getup_right.pkl --input_fps 30
 if __name__ == "__main__":
     # run the main function
     main()
