@@ -94,7 +94,7 @@ def main(env_cfg: ManagerBasedRLEnvCfg, agent_cfg: RslRlBaseRunnerCfg):
     # Disable randomizations
     env_cfg.observations.policy.enable_corruption = False
     env_cfg.events.randomize_rigid_body_material = None
-    # env_cfg.events.randomize_push_robot = None
+    env_cfg.events.randomize_push_robot = None
     env_cfg.scene.terrain.max_init_terrain_level = None
     if env_cfg.scene.terrain.terrain_generator is not None:
         env_cfg.scene.terrain.terrain_generator.num_rows = 5

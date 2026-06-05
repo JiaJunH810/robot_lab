@@ -278,8 +278,8 @@ class RobotLabSim2Sim:
 if __name__ == "__main__":
     # 路径配置
     xml_path = "/home/cyborg/Desktop/projects/robot_lab/source/sim2sim/assets/biped_temp_1_0.xml"
-    motion_file = "/home/cyborg/Desktop/datas/Cyborg/motion/Collect/140_01_stageii_collect.npz"
-    policy_path = "/home/cyborg/Desktop/projects/robot_lab/logs/rsl_rl/cyborg_beyondmimic/2026-05-30_16-18-56/exported/policy.onnx"
+    motion_file = "/home/cyborg/Desktop/projects/robot_lab/source/robot_lab/robot_lab/tasks/manager_based/motiontracking/config/cyborg/motion/getup_left.npz"
+    policy_path = "/home/cyborg/Desktop/projects/robot_lab/logs/rsl_rl/cyborg_beyondmimic/2026-06-04_14-56-07/exported/policy.onnx"
     
     r = RobotLabSim2Sim(xml_path, motion_file, policy_path)
     r.run()

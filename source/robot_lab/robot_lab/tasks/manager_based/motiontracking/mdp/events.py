@@ -13,9 +13,6 @@ from isaaclab.managers import SceneEntityCfg
 if TYPE_CHECKING:
     from isaaclab.envs import ManagerBasedEnv, ManagerBasedRLEnv
 
-from robot_lab.tasks.manager_based.motiontracking.mdp.terminations import DelayedTerminationManager
-
-
 def randomize_joint_default_pos(
     env: ManagerBasedEnv,
     env_ids: torch.Tensor | None,
@@ -56,39 +53,3 @@ def randomize_joint_default_pos(
         env.action_manager.get_term("joint_pos")._offset[env_ids, joint_ids] = pos
 
 
-def install_delayed_termination(
-    env: ManagerBasedRLEnv,
-    env_ids: torch.Tensor | None,
-    delay_env_ratio: float = 0.0,
-    max_delay_steps: int = 0,
-) -> None:
-    """Startup event: install DelayedTerminationManager for a fraction of envs.
-
-    Delay envs get ``max_delay_steps`` extra frames after a termination fires
-    before the episode actually resets, giving the robot time to recover
-    (e.g. get up after a fall).
-
-    Args:
-        env: The environment.
-        env_ids: Unused (required by event interface).
-        delay_env_ratio: Fraction of envs (0.0–1.0) to mark as delay envs.
-        max_delay_steps: Number of steps before a suppressed termination is
-            released. Set to 0 to disable the delay.
-    """
-    num_delay = int(env.num_envs * delay_env_ratio)
-    if num_delay <= 0 or max_delay_steps <= 0:
-        return
-
-    delay_mask = torch.zeros(env.num_envs, dtype=torch.bool, device=env.device)
-    delay_indices = torch.randperm(env.num_envs, device=env.device)[:num_delay]
-    delay_mask[delay_indices] = True
-
-    env.termination_manager = DelayedTerminationManager(
-        base=env.termination_manager,
-        delay_env_mask=delay_mask,
-        max_delay_steps=max_delay_steps,
-    )
-    print(
-        f"[install_delayed_termination] {num_delay}/{env.num_envs} envs, "
-        f"max_delay_steps={max_delay_steps}"
-    )

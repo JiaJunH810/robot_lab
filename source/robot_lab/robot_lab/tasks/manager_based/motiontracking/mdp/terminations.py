@@ -7,7 +7,6 @@ import torch
 from typing import TYPE_CHECKING
 
 import isaaclab.utils.math as math_utils
-from isaaclab.managers.termination_manager import TerminationManager
 
 if TYPE_CHECKING:
     from isaaclab.envs import ManagerBasedRLEnv
@@ -17,47 +16,6 @@ from isaaclab.managers import SceneEntityCfg
 
 from robot_lab.tasks.manager_based.motiontracking.mdp.commands import MotionCommand
 from robot_lab.tasks.manager_based.motiontracking.mdp.rewards import _get_body_indexes
-
-
-class DelayedTerminationManager(TerminationManager):
-    """TerminationManager that delays reset for a subset of envs.
-
-    When a termination fires for a delay env, the reset signal is suppressed
-    and a counter starts. Once the counter reaches ``max_delay_steps``, the
-    reset is released. If the env recovers before the counter expires, the
-    counter resets to zero — giving the robot a chance to get up on its own.
-    """
-
-    def __init__(
-        self,
-        base: TerminationManager,
-        delay_env_mask: torch.Tensor,
-        max_delay_steps: int,
-    ) -> None:
-        self.__dict__.update(base.__dict__)
-        self._delay_env_mask = delay_env_mask
-        self._delay_counters = torch.zeros_like(delay_env_mask, dtype=torch.long)
-        self._max_delay_steps = max_delay_steps
-
-    def compute(self) -> torch.Tensor:
-        dones = super().compute()
-
-        if self._max_delay_steps <= 0:
-            return dones
-
-        # Only delay termination (fall / tracking failure), NOT time-out.
-        delay_and_done = self._delay_env_mask & self._terminated_buf
-        self._delay_counters[delay_and_done] += 1
-
-        not_ready = delay_and_done & (self._delay_counters < self._max_delay_steps)
-        self._terminated_buf[not_ready] = False
-
-        ready = delay_and_done & (self._delay_counters >= self._max_delay_steps)
-        self._delay_counters[ready] = 0
-
-        self._delay_counters[self._delay_env_mask & ~self._terminated_buf] = 0
-
-        return self._truncated_buf | self._terminated_buf
 
 
 def bad_anchor_pos(env: ManagerBasedRLEnv, command_name: str, threshold: float) -> torch.Tensor:

@@ -106,7 +106,7 @@ class CommandsCfg:
 class ActionsCfg:
     """Action specifications for the MDP."""
 
-    joint_pos = mdp.JointPositionActionCfg(asset_name="robot", joint_names=[".*"], use_default_offset=True)
+    joint_pos = mdp.MotionDeltaJointPositionActionCfg(asset_name="robot", joint_names=[".*"])
 
 
 @configclass
@@ -182,16 +182,6 @@ class EventCfg:
         params={
             "asset_cfg": SceneEntityCfg("robot", body_names="waist_yaw_link"),
             "com_range": {"x": (-0.025, 0.025), "y": (-0.05, 0.05), "z": (-0.05, 0.05)},
-        },
-    )
-
-    # delayed termination — gives delay envs extra steps to recover after a fall
-    install_delayed_termination = EventTerm(
-        func=mdp.install_delayed_termination,
-        mode="startup",
-        params={
-            "delay_env_ratio": 0.4,
-            "max_delay_steps": 250,
         },
     )
 
