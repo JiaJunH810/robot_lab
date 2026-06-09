@@ -34,11 +34,40 @@ class MotionLoader:
 
     def __init__(self, motion_file: str, body_indexes: Sequence[int], device: str = "cpu"):
         if os.path.isfile(motion_file):
-            self.files = glob.glob(motion_file)
+            files = glob.glob(motion_file)
         else:
-            self.files = glob.glob(f"{motion_file}/**/*.npz", recursive=True)
-        assert len(self.files) != 0, f"Invalid file path: {motion_file}"
+            files = glob.glob(f"{motion_file}/**/*.npz", recursive=True)
+        assert len(files) != 0, f"Invalid file path: {motion_file}"
+        self._init_from_files(files, body_indexes, device)
+        self.num_getup = len(files)
+        self.num_stand = 0
 
+    @classmethod
+    def from_catalog(cls, catalog_path: str, body_indexes: Sequence[int], device: str = "cpu"):
+        """Load motions from a catalog.yaml file.
+
+        The catalog declares getup and stand file paths (relative to the catalog).
+        Files are loaded getup-first so that motion indices 0..num_getup-1 are
+        getup and num_getup.. are stand.
+        """
+        import yaml
+        base = os.path.dirname(catalog_path)
+        with open(catalog_path) as f:
+            catalog = yaml.safe_load(f)
+
+        getup_files = [os.path.join(base, p) for p in catalog.get("getup", [])]
+        stand_files = [os.path.join(base, p) for p in catalog.get("stand", [])]
+        all_files = getup_files + stand_files
+
+        obj = cls.__new__(cls)
+        obj._init_from_files(all_files, body_indexes, device)
+        obj.num_getup = len(getup_files)
+        obj.num_stand = len(stand_files)
+        return obj
+
+    def _init_from_files(self, files: list[str], body_indexes: Sequence[int], device: str):
+        """Shared init: load .npz files, concatenate tensors, build motion index."""
+        self.files = files
         self.time_step_total = []
         self.joint_pos = []
         self.joint_vel = []
@@ -52,7 +81,7 @@ class MotionLoader:
         self._body_lin_vel_b = []
         self._body_ang_vel_b = []
 
-        for motion_file in self.files:
+        for motion_file in files:
             data = np.load(motion_file)
             self.fps = data["fps"]
             self.joint_pos.append(torch.tensor(data["joint_pos"], dtype=torch.float32, device=device))
@@ -67,11 +96,11 @@ class MotionLoader:
             self._body_lin_vel_b.append(torch.tensor(data["body_lin_vel_b"], dtype=torch.float32, device=device))
             self._body_ang_vel_b.append(torch.tensor(data["body_ang_vel_b"], dtype=torch.float32, device=device))
             self.time_step_total.append(data["joint_pos"].shape[0])
-        self._body_indexes = body_indexes
 
-        self.joint_pos = torch.cat(self.joint_pos, dim=0)         # (total_frames, num_joints)
+        self._body_indexes = body_indexes
+        self.joint_pos = torch.cat(self.joint_pos, dim=0)
         self.joint_vel = torch.cat(self.joint_vel, dim=0)
-        self._body_pos_w = torch.cat(self._body_pos_w, dim=0)     # (total_frames, num_bodies, 3)
+        self._body_pos_w = torch.cat(self._body_pos_w, dim=0)
         self._body_quat_w = torch.cat(self._body_quat_w, dim=0)
         self._body_lin_vel_w = torch.cat(self._body_lin_vel_w, dim=0)
         self._body_ang_vel_w = torch.cat(self._body_ang_vel_w, dim=0)
@@ -85,7 +114,7 @@ class MotionLoader:
         self.motion_starts = torch.cat(
             [torch.tensor([0], device=device), torch.cumsum(self.time_step_total, dim=0)[:-1]]
         )
-        self.num_motions = len(self.files)
+        self.num_motions = len(files)
 
     @property
     def body_pos_w(self) -> torch.Tensor:
@@ -145,10 +174,22 @@ class MotionCommand(CommandTerm):
             self.robot.find_bodies(self.cfg.body_names, preserve_order=True)[0], dtype=torch.long, device=self.device
         )
 
-        self.motion = MotionLoader(self.cfg.motion_file, self.body_indexes, device=self.device)
+        self.motion = MotionLoader.from_catalog(self.cfg.motion_file, self.body_indexes, device=self.device)
 
-        # Each env is permanently assigned one motion, evenly distributed
-        self.motion_ids = torch.arange(self.num_envs, device=self.device) % self.motion.num_motions
+        # Assign envs: first delay_env_ratio → getup motions, rest → stand motions
+        num_delay = int(self.num_envs * self.cfg.delay_reset_env_ratio)
+        is_delay = torch.arange(self.num_envs, device=self.device) < num_delay
+        delay_idx = torch.where(is_delay)[0]
+        normal_idx = torch.where(~is_delay)[0]
+
+        self.motion_ids = torch.empty(self.num_envs, dtype=torch.long, device=self.device)
+        if len(delay_idx) > 0:
+            self.motion_ids[delay_idx] = torch.arange(len(delay_idx), device=self.device) % self.motion.num_getup
+        if len(normal_idx) > 0:
+            self.motion_ids[normal_idx] = (
+                self.motion.num_getup + torch.arange(len(normal_idx), device=self.device) % self.motion.num_stand
+            )
+
         self._motion_starts = self.motion.motion_starts[self.motion_ids]
         self._motion_lengths = self.motion.time_step_total[self.motion_ids]
 
@@ -292,3 +333,5 @@ class MotionCommandCfg(CommandTermCfg):
     velocity_range: dict[str, tuple[float, float]] = {}
 
     joint_position_range: tuple[float, float] = (-0.52, 0.52)
+
+    delay_reset_env_ratio: float = MISSING

@@ -21,13 +21,28 @@ def feet_contact_time(env: ManagerBasedRLEnv, sensor_cfg: SceneEntityCfg, thresh
     return reward
 
 
-def track_root_height(env: ManagerBasedRLEnv, std: float, asset_cfg: SceneEntityCfg) -> torch.Tensor:
-    """Reward for maintaining default standing height."""
+def track_root_height(env: ManagerBasedRLEnv, std: float, asset_cfg: SceneEntityCfg,
+                      mask_delay: bool = False, delay_env_rew_ratio: float = 1.0) -> torch.Tensor:
+    """Reward for maintaining default standing height.
+
+    When mask_delay=True, only delay envs currently in the buffer period receive
+    the reward (amplified by delay_env_rew_ratio). Normal envs and delay envs
+    that have already recovered get zero. This matches AMP_mjlab's behaviour.
+    """
     asset = env.scene[asset_cfg.name]
     desired_height = asset.data.default_root_state[:, 2]
     cur_root_height = asset.data.root_pos_w[:, 2]
     height_error = torch.square(desired_height - cur_root_height)
-    return torch.exp(-height_error / std**2)
+    reward = torch.exp(-height_error / std**2)
+
+    if mask_delay:
+        from robot_lab.tasks.manager_based.beyondamp.mdp.terminations import DelayedTerminationManager
+        tm = env.termination_manager
+        if isinstance(tm, DelayedTerminationManager):
+            in_buffer = tm._delay_env_mask & (tm._delay_counters > 0)
+            reward = torch.where(in_buffer, reward * delay_env_rew_ratio, torch.zeros_like(reward))
+
+    return reward
 
 
 def self_collisions(env: ManagerBasedRLEnv, sensor_cfg: SceneEntityCfg, threshold: float) -> torch.Tensor:

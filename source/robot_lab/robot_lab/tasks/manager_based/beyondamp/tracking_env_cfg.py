@@ -31,6 +31,8 @@ import robot_lab.tasks.manager_based.beyondamp.obs_groups as amp_groups
 # Scene definition
 ##
 
+DELAY_RESET_ENV_RATIO = 0.4
+
 VELOCITY_RANGE = {
     "x": (-0.5, 0.5),
     "y": (-0.5, 0.5),
@@ -90,6 +92,7 @@ class CommandsCfg:
         asset_name="robot",
         resampling_time_range=(1.0e9, 1.0e9),
         debug_vis=True,
+        delay_reset_env_ratio=DELAY_RESET_ENV_RATIO,
         pose_range={
             "x": (-0.05, 0.05),
             "y": (-0.05, 0.05),
@@ -198,7 +201,7 @@ class EventCfg:
         func=mdp.set_delay_termination,
         mode="startup",
         params={
-            "delay_reset_env_ratio": 1.0,
+            "delay_reset_env_ratio": DELAY_RESET_ENV_RATIO,
             "max_delay_steps": 250,
         }
     )
@@ -219,8 +222,13 @@ class RewardsCfg:
     )
     track_root_height = RewTerm(
         func=mdp.track_root_height,
-        weight=3.5,
-        params={"std": 0.3, "asset_cfg": SceneEntityCfg("robot")},
+        weight=1.0,
+        params={
+            "std": 0.3,
+            "asset_cfg": SceneEntityCfg("robot"),
+            "mask_delay": True,
+            "delay_env_rew_ratio": 3.5,
+        },
     )
 
     # Tracking
