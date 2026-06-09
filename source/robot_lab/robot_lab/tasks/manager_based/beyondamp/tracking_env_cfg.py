@@ -31,7 +31,7 @@ import robot_lab.tasks.manager_based.beyondamp.obs_groups as amp_groups
 # Scene definition
 ##
 
-DELAY_RESET_ENV_RATIO = 0.4
+DELAY_RESET_ENV_RATIO = 0.5
 
 VELOCITY_RANGE = {
     "x": (-0.5, 0.5),

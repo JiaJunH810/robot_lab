@@ -190,6 +190,7 @@ class MotionCommand(CommandTerm):
                 self.motion.num_getup + torch.arange(len(normal_idx), device=self.device) % self.motion.num_stand
             )
 
+        self._is_delay = is_delay
         self._motion_starts = self.motion.motion_starts[self.motion_ids]
         self._motion_lengths = self.motion.time_step_total[self.motion_ids]
 
@@ -236,10 +237,17 @@ class MotionCommand(CommandTerm):
         if len(env_ids) == 0:
             return
 
-        # Random frame within each env's assigned motion
+        # Random frame within each env's assigned motion.
+        # Delay envs sample only from early frames (fallen states) so they
+        # consistently practise getting up, while normal envs use the full motion.
         starts = self._motion_starts[env_ids]
         lengths = self._motion_lengths[env_ids]
-        local_idx = (torch.rand(len(env_ids), device=self.device) * (lengths - 1).float()).long()
+        is_delay = self._is_delay[env_ids]
+        max_len = lengths.float()
+        if is_delay.any():
+            early_len = (lengths.float() * self.cfg.getup_reset_ratio).clamp(min=1)
+            max_len = torch.where(is_delay, early_len, max_len)
+        local_idx = (torch.rand(len(env_ids), device=self.device) * (max_len - 1)).long()
         idx = starts + local_idx
 
         # Root pose at the anchor body
@@ -335,3 +343,4 @@ class MotionCommandCfg(CommandTermCfg):
     joint_position_range: tuple[float, float] = (-0.52, 0.52)
 
     delay_reset_env_ratio: float = MISSING
+    getup_reset_ratio: float = 0.4
