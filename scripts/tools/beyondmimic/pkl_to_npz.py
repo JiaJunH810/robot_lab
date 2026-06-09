@@ -421,12 +421,12 @@ def main():
 
     for motion in tqdm(motions):
         basename = os.path.basename(motion).split('.')[0]
-        args_cli.output_name = f"source/robot_lab/robot_lab/tasks/manager_based/motiontracking/config/cyborg/motion/{basename}.npz"
+        args_cli.output_name = f"source/robot_lab/robot_lab/tasks/manager_based/beyondamp/config/cyborg/motion/{basename}.npz"
         print(args_cli.output_name)
 
         run_simulator(motion, sim, scene)
 
-# python scripts/tools/beyondmimic/pkl_to_npz.py -f /home/cyborg/Desktop/datas/Cyborg/motion/Lafan/getup_right.pkl --input_fps 30
+# python scripts/tools/beyondmimic/pkl_to_npz.py -f /home/cyborg/Desktop/datas/Cyborg/motion/Collect --input_fps 30
 if __name__ == "__main__":
     # run the main function
     main()

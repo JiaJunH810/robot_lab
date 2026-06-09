@@ -194,67 +194,54 @@ class EventCfg:
         params={"velocity_range": VELOCITY_RANGE},
     )
 
+    set_delay_termination = EventTerm(
+        func=mdp.set_delay_termination,
+        mode="startup",
+        params={
+            "delay_reset_env_ratio": 1.0,
+            "max_delay_steps": 250,
+        }
+    )
+
 
 @configclass
 class RewardsCfg:
     """Reward terms for the MDP."""
 
     # Base
+    is_terminated = RewTerm(func=mdp.is_terminated, weight=-200.0)
     joint_acc_l2 = RewTerm(func=mdp.joint_acc_l2, weight=-2.5e-7)
-    joint_torques_l2 = RewTerm(func=mdp.joint_torques_l2, weight=-1e-5)
-    action_rate_l2 = RewTerm(func=mdp.action_rate_l2, weight=-1e-1)
+    action_rate_l2 = RewTerm(func=mdp.action_rate_l2, weight=-0.01)
     joint_pos_limits = RewTerm(
         func=mdp.joint_pos_limits,
         weight=-10.0,
         params={"asset_cfg": SceneEntityCfg("robot", joint_names=[".*"])},
     )
+    track_root_height = RewTerm(
+        func=mdp.track_root_height,
+        weight=1.0,
+        params={"std": 0.3, "asset_cfg": SceneEntityCfg("robot")},
+    )
 
     # Tracking
-    motion_global_anchor_pos = RewTerm(
-        func=mdp.motion_global_anchor_position_error_exp,
-        weight=0.5,
-        params={"command_name": "motion", "std": 0.3},
-    )
-    motion_global_anchor_ori = RewTerm(
-        func=mdp.motion_global_anchor_orientation_error_exp,
-        weight=0.5,
-        params={"command_name": "motion", "std": 0.4},
-    )
-    motion_body_pos = RewTerm(
-        func=mdp.motion_relative_body_position_error_exp,
-        weight=1.0,
-        params={"command_name": "motion", "std": 0.3},
-    )
-    motion_body_ori = RewTerm(
-        func=mdp.motion_relative_body_orientation_error_exp,
-        weight=1.0,
-        params={"command_name": "motion", "std": 0.4},
-    )
-    motion_body_lin_vel = RewTerm(
-        func=mdp.motion_global_body_linear_velocity_error_exp,
-        weight=1.0,
-        params={"command_name": "motion", "std": 1.0},
-    )
-    motion_body_ang_vel = RewTerm(
-        func=mdp.motion_global_body_angular_velocity_error_exp,
-        weight=1.0,
-        params={"command_name": "motion", "std": 3.14},
-    )
 
     # Others
-    undesired_contacts = RewTerm(
-        func=mdp.undesired_contacts,
+    self_collisions = RewTerm(
+        func=mdp.self_collisions,
         weight=-0.1,
         params={
             "sensor_cfg": SceneEntityCfg(
                 "contact_forces",
                 body_names=[
-                    r"^(?!ankle_l_roll_link$)(?!ankle_r_roll_link$)(?!arm_l_07_link$)(?!arm_r_07_link$).+$"
+                    "waist_yaw_link",
+                    "arm_l_02_link", "arm_l_04_link", "arm_l_07_link",
+                    "arm_r_02_link", "arm_r_04_link", "arm_r_07_link",
                 ],
             ),
-            "threshold": 1.0,
+            "threshold": 10.0,
         },
     )
+
 
 
 @configclass
@@ -262,26 +249,13 @@ class TerminationsCfg:
     """Termination terms for the MDP."""
 
     time_out = DoneTerm(func=mdp.time_out, time_out=True)
-    anchor_pos = DoneTerm(
-        func=mdp.bad_anchor_pos_z_only,
-        params={"command_name": "motion", "threshold": 0.375},
+    bad_orientation = DoneTerm(
+        func=mdp.bad_orientation,
+        params={"limit_angle": 1.2217, "asset_cfg": SceneEntityCfg("robot")},
     )
-    anchor_ori = DoneTerm(
-        func=mdp.bad_anchor_ori,
-        params={"asset_cfg": SceneEntityCfg("robot"), "command_name": "motion", "threshold": 1.2},
-    )
-    ee_body_pos = DoneTerm(
-        func=mdp.bad_motion_body_pos_z_only,
-        params={
-            "command_name": "motion",
-            "threshold": 0.375,
-            "body_names": [
-                "ankle_l_roll_link",
-                "ankle_r_roll_link",
-                "arm_l_07_link",
-                "arm_r_07_link",
-            ],
-        },
+    bad_base_height = DoneTerm(
+        func=mdp.root_height_below_minimum,
+        params={"minimum_height": 0.60, "asset_cfg": SceneEntityCfg("robot")},
     )
 
 

@@ -13,6 +13,7 @@ from isaaclab.managers import SceneEntityCfg
 if TYPE_CHECKING:
     from isaaclab.envs import ManagerBasedEnv
 
+from robot_lab.tasks.manager_based.beyondamp.mdp.terminations import DelayedTerminationManager
 
 def randomize_joint_default_pos(
     env: ManagerBasedEnv,
@@ -52,3 +53,23 @@ def randomize_joint_default_pos(
         asset.data.default_joint_pos[env_ids, joint_ids] = pos
         # update the offset in action since it is not updated automatically
         env.action_manager.get_term("joint_pos")._offset[env_ids, joint_ids] = pos
+
+
+def set_delay_termination(
+        env: ManagerBasedEnv,
+        env_ids: torch.Tensor | None,
+        delay_reset_env_ratio: float = 0.0,
+        max_delay_steps: int = 0
+) -> None:
+    num_delay = int(env.num_envs * delay_reset_env_ratio)
+
+    if num_delay > 0 and max_delay_steps > 0:
+        delay_mask = torch.zeros(env.num_envs, dtype=torch.bool, device=env.device)
+        delay_indices = torch.randperm(env.num_envs, device=env.device)[:num_delay]
+        delay_mask[delay_indices] = True
+
+        env.termination_manager = DelayedTerminationManager(
+            base=env.termination_manager,
+            delay_env_mask=delay_mask,
+            max_delay_steps=max_delay_steps
+        )

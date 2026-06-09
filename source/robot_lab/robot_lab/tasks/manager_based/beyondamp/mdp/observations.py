@@ -20,18 +20,6 @@ def robot_anchor_ori_w(env: ManagerBasedEnv, command_name: str) -> torch.Tensor:
     return mat[..., :2].reshape(mat.shape[0], -1)
 
 
-def robot_anchor_lin_vel_w(env: ManagerBasedEnv, command_name: str) -> torch.Tensor:
-    command: MotionCommand = env.command_manager.get_term(command_name)
-
-    return command.robot_anchor_vel_w[:, :3].view(env.num_envs, -1)
-
-
-def robot_anchor_ang_vel_w(env: ManagerBasedEnv, command_name: str) -> torch.Tensor:
-    command: MotionCommand = env.command_manager.get_term(command_name)
-
-    return command.robot_anchor_vel_w[:, 3:6].view(env.num_envs, -1)
-
-
 def robot_body_pos_b(env: ManagerBasedEnv, command_name: str) -> torch.Tensor:
     command: MotionCommand = env.command_manager.get_term(command_name)
 
@@ -59,33 +47,6 @@ def robot_body_ori_b(env: ManagerBasedEnv, command_name: str) -> torch.Tensor:
     mat = matrix_from_quat(ori_b)
     return mat[..., :2].reshape(mat.shape[0], -1)
 
-
-def motion_anchor_pos_b(env: ManagerBasedEnv, command_name: str) -> torch.Tensor:
-    command: MotionCommand = env.command_manager.get_term(command_name)
-
-    pos, _ = subtract_frame_transforms(
-        command.robot_anchor_pos_w,
-        command.robot_anchor_quat_w,
-        command.anchor_pos_w,
-        command.anchor_quat_w,
-    )
-
-    return pos.view(env.num_envs, -1)
-
-
-def motion_anchor_ori_b(env: ManagerBasedEnv, command_name: str) -> torch.Tensor:
-    command: MotionCommand = env.command_manager.get_term(command_name)
-
-    _, ori = subtract_frame_transforms(
-        command.robot_anchor_pos_w,
-        command.robot_anchor_quat_w,
-        command.anchor_pos_w,
-        command.anchor_quat_w,
-    )
-    mat = matrix_from_quat(ori)
-    return mat[..., :2].reshape(mat.shape[0], -1)
-
-# ------------------------------ AMP: body-frame velocities ------------------------------#
 
 def robot_body_lin_vel_b(env: ManagerBasedEnv, command_name: str) -> torch.Tensor:
     """机器人所有 key body 在本体系的线速度 (matching AMP_mjlab).
