@@ -257,8 +257,8 @@ class MotionCommand(CommandTerm):
         Samples local frame t such that t and t+1 are guaranteed to be inside
         the same motion clip (never crossing motion boundaries).
         """
-        max_local = self._motion_lengths - 2  # last valid t so t+1 stays in bounds
-        local_t = torch.randint(0, max_local.clamp(min=1), (self.num_envs,), device=self.device)
+        max_local = (self._motion_lengths - 2).clamp(min=1)  # last valid t so t+1 stays in bounds
+        local_t = (torch.rand(self.num_envs, device=self.device) * max_local.float()).long()
         t = self._motion_starts + local_t
         t_next = t + 1
 
