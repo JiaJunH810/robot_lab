@@ -153,6 +153,10 @@ class MotionCommand(CommandTerm):
         self._motion_lengths = self.motion.time_step_total[self.motion_ids]
 
     @property
+    def command(self) -> torch.Tensor:
+        return torch.zeros(self.num_envs, 0, device=self.device)
+    
+    @property
     def robot_joint_pos(self) -> torch.Tensor:
         return self.robot.data.joint_pos
 
@@ -239,6 +243,10 @@ class MotionCommand(CommandTerm):
 
     def _update_command(self):
         """No-op: we do not track a reference motion frame-by-frame."""
+        pass
+
+    def _update_metrics(self):
+        """No-op: motion command does not track per-env metrics."""
         pass
 
     # ---- AMP discriminator expert data ----
