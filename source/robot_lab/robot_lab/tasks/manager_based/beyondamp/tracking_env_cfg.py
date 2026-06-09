@@ -219,7 +219,7 @@ class RewardsCfg:
     )
     track_root_height = RewTerm(
         func=mdp.track_root_height,
-        weight=1.0,
+        weight=3.5,
         params={"std": 0.3, "asset_cfg": SceneEntityCfg("robot")},
     )
 

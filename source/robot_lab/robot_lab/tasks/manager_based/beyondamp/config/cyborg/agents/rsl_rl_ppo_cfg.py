@@ -17,8 +17,8 @@ class CyborgBeyondAMPFlatPPORunnerCfg(RslRlOnPolicyRunnerCfg):
     wrapper_type = AMPRslRlVecEnvWrapper
 
     amp_discr_hidden_dims = [512, 256, 128]
-    amp_reward_coef = 0.5
-    amp_task_reward_lerp = 0.7
+    amp_reward_coef = 0.1
+    amp_task_reward_lerp = 0.75
     amp_min_normalized_std = 0.05
     amp_replay_buffer_size = 100000
 
