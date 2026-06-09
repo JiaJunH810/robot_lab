@@ -236,8 +236,35 @@ class AMPPPO:
         if not self.normalize_advantage_per_mini_batch:
             st.advantages = (st.advantages - st.advantages.mean()) / (st.advantages.std() + 1e-8)
 
+    def _clamp_action_std(self):
+        """Clamp action std above floor, matching AMP_mjlab's safeguard.
+
+        Uses self.actor.distribution.std_type (always present) to decide
+        which parameter to clamp.  NaN/Inf are repaired defensively.
+        """
+        dist = self.actor.distribution
+        if dist is None:
+            return
+        if not hasattr(dist, 'std_type'):
+            return
+
+        if dist.std_type == 'scalar' and hasattr(dist, 'std_param'):
+            min_val = self.amp_min_normalized_std
+            dist.std_param.data.clamp_(min=min_val)
+            dist.std_param.data.nan_to_num_(nan=1.0, posinf=1.0, neginf=0.01)
+        elif dist.std_type == 'log' and hasattr(dist, 'log_std_param'):
+            if isinstance(self.amp_min_normalized_std, torch.Tensor):
+                min_val = torch.log(self.amp_min_normalized_std)
+            else:
+                min_val = torch.log(torch.tensor(self.amp_min_normalized_std))
+            dist.log_std_param.data.clamp_(min=min_val)
+            dist.log_std_param.data.nan_to_num_(nan=0.0, posinf=0.0, neginf=-4.6)
+
     def update(self) -> dict[str, float]:
         """Run optimization epochs over stored batches and return mean losses."""
+        # Guard against NaN/std collapse before any forward pass
+        self._clamp_action_std()
+
         mean_value_loss = 0
         mean_surrogate_loss = 0
         mean_entropy = 0
@@ -454,13 +481,10 @@ class AMPPPO:
             if self.rnd_optimizer:
                 self.rnd_optimizer.step()
 
-            # Clamp action std to prevent collapse during AMP training
-            if hasattr(self.actor.distribution, 'std_param'):
-                if isinstance(self.amp_min_normalized_std, torch.Tensor):
-                    if torch.any(self.amp_min_normalized_std > 0):
-                        self.actor.distribution.std_param.data.clamp_(min=self.amp_min_normalized_std)
-                elif self.amp_min_normalized_std > 0:
-                    self.actor.distribution.std_param.data.clamp_(min=self.amp_min_normalized_std)
+            # Clamp action std to prevent collapse during AMP training.
+            # Must handle NaN: discriminator gradients can NaN std_param, and
+            # clamp_ alone cannot fix NaN (NaN < any value is False).
+            self._clamp_action_std()
 
             # Store the losses
             mean_value_loss += value_loss.item()
