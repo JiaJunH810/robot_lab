@@ -231,7 +231,7 @@ class RewardsCfg:
         func=mdp.track_root_height,
         weight=1.0,
         params={
-            "std": 0.3,
+            "std": 0.6,
             "asset_cfg": SceneEntityCfg("robot"),
             "mask_delay": True,
             "delay_env_rew_ratio": 3.5,

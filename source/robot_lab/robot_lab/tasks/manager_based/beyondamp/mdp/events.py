@@ -64,9 +64,7 @@ def set_delay_termination(
     num_delay = int(env.num_envs * delay_reset_env_ratio)
 
     if num_delay > 0 and max_delay_steps > 0:
-        delay_mask = torch.zeros(env.num_envs, dtype=torch.bool, device=env.device)
-        delay_indices = torch.randperm(env.num_envs, device=env.device)[:num_delay]
-        delay_mask[delay_indices] = True
+        delay_mask = torch.arange(env.num_envs, device=env.device) < num_delay
 
         env.termination_manager = DelayedTerminationManager(
             base=env.termination_manager,

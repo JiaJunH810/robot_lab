@@ -25,9 +25,10 @@ def track_root_height(env: ManagerBasedRLEnv, std: float, asset_cfg: SceneEntity
                       mask_delay: bool = False, delay_env_rew_ratio: float = 1.0) -> torch.Tensor:
     """Reward for maintaining default standing height.
 
-    When mask_delay=True, only delay envs currently in the buffer period receive
-    the reward (amplified by delay_env_rew_ratio). Normal envs and delay envs
-    that have already recovered get zero. This matches AMP_mjlab's behaviour.
+    When mask_delay=True, delay envs in the buffer period get the reward
+    amplified by delay_env_rew_ratio, while all other envs receive the base
+    reward unchanged. This gives normal envs a dense height signal for learning
+    to stand, while still incentivising delay envs to get up.
     """
     asset = env.scene[asset_cfg.name]
     desired_height = asset.data.default_root_state[:, 2]
@@ -40,7 +41,7 @@ def track_root_height(env: ManagerBasedRLEnv, std: float, asset_cfg: SceneEntity
         tm = env.termination_manager
         if isinstance(tm, DelayedTerminationManager):
             in_buffer = tm._delay_env_mask & (tm._delay_counters > 0)
-            reward = torch.where(in_buffer, reward * delay_env_rew_ratio, torch.zeros_like(reward))
+            reward = torch.where(in_buffer, reward * delay_env_rew_ratio, reward)
 
     return reward
 
