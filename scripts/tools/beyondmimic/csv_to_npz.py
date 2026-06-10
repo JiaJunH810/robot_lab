@@ -1,4 +1,4 @@
-# Copyright (c) 2024-2026 Ziqi Fan
+# Copyright (c) 2024-2025 Ziqi Fan
 # SPDX-License-Identifier: Apache-2.0
 
 """This script replay a motion from a csv file and output it to a npz file
@@ -6,14 +6,16 @@
 .. code-block:: bash
 
     # Usage
-    python csv_to_npz.py -f path_to_input.csv --input_fps 60
+    python csv_to_npz.py -f path_to_input.csv --input_fps 120
 """
 
 """Launch Isaac Sim Simulator first."""
 
 import argparse
-
 import numpy as np
+import glob
+from tqdm import tqdm
+import os
 
 from isaaclab.app import AppLauncher
 
@@ -53,18 +55,22 @@ simulation_app = app_launcher.app
 
 import torch
 
-##
-# Pre-defined configs
-##
-from robot_lab.assets.unitree import UNITREE_G1_29DOF_CFG
-
 import isaaclab.sim as sim_utils
 from isaaclab.assets import ArticulationCfg, AssetBaseCfg
 from isaaclab.scene import InteractiveScene, InteractiveSceneCfg
 from isaaclab.sim import SimulationContext
 from isaaclab.utils import configclass
 from isaaclab.utils.assets import ISAAC_NUCLEUS_DIR
-from isaaclab.utils.math import axis_angle_from_quat, quat_conjugate, quat_mul, quat_slerp
+from isaaclab.utils.math import (
+    axis_angle_from_quat, matrix_from_quat,
+    quat_apply_inverse, quat_conjugate, quat_mul,
+    quat_slerp, subtract_frame_transforms,
+)
+
+##
+# Pre-defined configs
+##
+from robot_lab.assets.cyborg import CYBORG_BIPED_CFG
 
 
 @configclass
@@ -84,7 +90,11 @@ class ReplayMotionsSceneCfg(InteractiveSceneCfg):
     )
 
     # articulation
-    robot: ArticulationCfg = UNITREE_G1_29DOF_CFG.replace(prim_path="{ENV_REGEX_NS}/Robot")
+    robot: ArticulationCfg = CYBORG_BIPED_CFG.replace(prim_path="{ENV_REGEX_NS}/Robot")
+
+
+def ToTensor(array, device):
+    return torch.tensor(array, dtype=torch.float32, device=device)
 
 
 class MotionLoader:
@@ -109,26 +119,31 @@ class MotionLoader:
         self._compute_velocities()
 
     def _load_motion(self):
-        """Loads the motion from the csv file."""
-        if self.frame_range is None:
-            motion = torch.from_numpy(np.loadtxt(self.motion_file, delimiter=","))
-        else:
-            motion = torch.from_numpy(
-                np.loadtxt(
-                    self.motion_file,
-                    delimiter=",",
-                    skiprows=self.frame_range[0] - 1,
-                    max_rows=self.frame_range[1] - self.frame_range[0] + 1,
-                )
-            )
-        motion = motion.to(torch.float32).to(self.device)
-        self.motion_base_poss_input = motion[:, :3]
-        self.motion_base_rots_input = motion[:, 3:7]
-        self.motion_base_rots_input = self.motion_base_rots_input[:, [3, 0, 1, 2]]  # convert to wxyz
-        self.motion_dof_poss_input = motion[:, 7:]
+        """Loads the motion from the csv file.
 
-        self.input_frames = motion.shape[0]
-        self.duration = (self.input_frames - 1) * self.input_dt
+        CSV 格式每行: root_x, root_y, root_z, quat_x, quat_y, quat_z, quat_w, dof_1, ..., dof_N
+        quat 是 x,y,z,w 顺序，需要转为 w,x,y,z (Isaac Sim 格式)。
+        """
+        if self.frame_range is None:
+            motion = np.loadtxt(self.motion_file, delimiter=",")
+            self.motion_base_poss_input = ToTensor(motion[:, :3], device=self.device)
+            self.motion_base_rots_input = ToTensor(motion[:, 3:7], device=self.device)
+            self.motion_base_rots_input = self.motion_base_rots_input[:, [3, 0, 1, 2]]  # xyzw → wxyz
+            self.motion_dof_poss_input = ToTensor(motion[:, 7:], device=self.device)
+        else:
+            motion = np.loadtxt(
+                self.motion_file,
+                delimiter=",",
+                skiprows=self.frame_range[0] - 1,
+                max_rows=self.frame_range[1] - self.frame_range[0] + 1,
+            )
+            self.motion_base_poss_input = ToTensor(motion[:, :3], device=self.device)
+            self.motion_base_rots_input = ToTensor(motion[:, 3:7], device=self.device)
+            self.motion_base_rots_input = self.motion_base_rots_input[:, [3, 0, 1, 2]]  # xyzw → wxyz
+            self.motion_dof_poss_input = ToTensor(motion[:, 7:], device=self.device)
+
+        self.input_frames = self.motion_base_poss_input.shape[0]
+        self.duration = (self.input_frames - 1) * self.input_dt  # 运动序列所耗时间(s)
         print(f"Motion loaded ({self.motion_file}), duration: {self.duration} sec, frames: {self.input_frames}")
 
     def _interpolate_motion(self):
@@ -224,11 +239,11 @@ class MotionLoader:
         return state, reset_flag
 
 
-def run_simulator(sim: sim_utils.SimulationContext, scene: InteractiveScene):
+def run_simulator(motion_file, sim: sim_utils.SimulationContext, scene: InteractiveScene):
     """Runs the simulation loop."""
     # Load motion
     motion = MotionLoader(
-        motion_file=args_cli.input_file,
+        motion_file=motion_file,
         input_fps=args_cli.input_fps,
         output_fps=args_cli.output_fps,
         device=sim.device,
@@ -238,47 +253,58 @@ def run_simulator(sim: sim_utils.SimulationContext, scene: InteractiveScene):
     # Extract scene entities
     robot = scene["robot"]
     joint_sdk_names = [
-        "left_hip_pitch_joint",
-        "left_hip_roll_joint",
-        "left_hip_yaw_joint",
-        "left_knee_joint",
-        "left_ankle_pitch_joint",
-        "left_ankle_roll_joint",
-        "right_hip_pitch_joint",
-        "right_hip_roll_joint",
-        "right_hip_yaw_joint",
-        "right_knee_joint",
-        "right_ankle_pitch_joint",
-        "right_ankle_roll_joint",
-        "waist_yaw_joint",
-        "waist_roll_joint",
-        "waist_pitch_joint",
-        "left_shoulder_pitch_joint",
-        "left_shoulder_roll_joint",
-        "left_shoulder_yaw_joint",
-        "left_elbow_joint",
-        "left_wrist_roll_joint",
-        "left_wrist_pitch_joint",
-        "left_wrist_yaw_joint",
-        "right_shoulder_pitch_joint",
-        "right_shoulder_roll_joint",
-        "right_shoulder_yaw_joint",
-        "right_elbow_joint",
-        "right_wrist_roll_joint",
-        "right_wrist_pitch_joint",
-        "right_wrist_yaw_joint",
+        # === 左腿 ===
+        "J_hip_l_roll",
+        "J_hip_l_yaw",
+        "J_hip_l_pitch",
+        "J_knee_l_pitch",
+        "J_ankle_l_pitch",
+        "J_ankle_l_roll",
+        # === 右腿 ===
+        "J_hip_r_roll",
+        "J_hip_r_yaw",
+        "J_hip_r_pitch",
+        "J_knee_r_pitch",
+        "J_ankle_r_pitch",
+        "J_ankle_r_roll",
+        # === 腰部 ===
+        "J_waist_yaw",
+        "J_waist_pitch",
+        # === 左臂 ===
+        "J_arm_l_01",
+        "J_arm_l_02",
+        "J_arm_l_03",
+        "J_arm_l_04",
+        "J_arm_l_05",
+        "J_arm_l_06",
+        "J_arm_l_07",
+        # === 右臂 ===
+        "J_arm_r_01",
+        "J_arm_r_02",
+        "J_arm_r_03",
+        "J_arm_r_04",
+        "J_arm_r_05",
+        "J_arm_r_06",
+        "J_arm_r_07",
     ]
     robot_joint_indexes = robot.find_joints(joint_sdk_names, preserve_order=True)[0]
+    anchor_body_idx = robot.body_names.index("base_link")
 
     # ------- data logger -------------------------------------------------------
     log = {
         "fps": [args_cli.output_fps],
         "joint_pos": [],
         "joint_vel": [],
+        "joint_names": list(robot.joint_names),
         "body_pos_w": [],
         "body_quat_w": [],
         "body_lin_vel_w": [],
         "body_ang_vel_w": [],
+        "body_pos_b": [],
+        "body_quat_b": [],
+        "body_ori_b": [],
+        "body_lin_vel_b": [],
+        "body_ang_vel_b": [],
     }
     file_saved = False
     # --------------------------------------------------------------------------
@@ -326,6 +352,31 @@ def run_simulator(sim: sim_utils.SimulationContext, scene: InteractiveScene):
             log["body_lin_vel_w"].append(robot.data.body_lin_vel_w[0, :].cpu().numpy().copy())
             log["body_ang_vel_w"].append(robot.data.body_ang_vel_w[0, :].cpu().numpy().copy())
 
+            # Compute body-frame (b) data relative to anchor body
+            anchor_pos = robot.data.body_pos_w[0, anchor_body_idx]
+            anchor_quat = robot.data.body_quat_w[0, anchor_body_idx]
+            body_pos_w = robot.data.body_pos_w[0]
+            body_quat_w = robot.data.body_quat_w[0]
+            body_lin_vel_w = robot.data.body_lin_vel_w[0]
+            body_ang_vel_w = robot.data.body_ang_vel_w[0]
+            num_bodies = body_pos_w.shape[0]
+
+            pos_b, quat_b = subtract_frame_transforms(
+                anchor_pos[None, :].repeat(num_bodies, 1),
+                anchor_quat[None, :].repeat(num_bodies, 1),
+                body_pos_w,
+                body_quat_w,
+            )
+            log["body_pos_b"].append(pos_b.cpu().numpy().copy())
+            log["body_quat_b"].append(quat_b.cpu().numpy().copy())
+            mat = matrix_from_quat(quat_b)
+            log["body_ori_b"].append(mat[..., :2].reshape(num_bodies, -1).cpu().numpy().copy())
+
+            vel_b = quat_apply_inverse(body_quat_w, body_lin_vel_w)
+            log["body_lin_vel_b"].append(vel_b.cpu().numpy().copy())
+            ang_b = quat_apply_inverse(body_quat_w, body_ang_vel_w)
+            log["body_ang_vel_b"].append(ang_b.cpu().numpy().copy())
+
         if reset_flag and not file_saved:
             file_saved = True
             for k in (
@@ -335,11 +386,17 @@ def run_simulator(sim: sim_utils.SimulationContext, scene: InteractiveScene):
                 "body_quat_w",
                 "body_lin_vel_w",
                 "body_ang_vel_w",
+                "body_pos_b",
+                "body_quat_b",
+                "body_ori_b",
+                "body_lin_vel_b",
+                "body_ang_vel_b",
             ):
                 log[k] = np.stack(log[k], axis=0)
 
             np.savez(args_cli.output_name, **log)
             print("[INFO]: Motion npz file saved to", args_cli.output_name)
+            return
 
 
 def main():
@@ -356,9 +413,21 @@ def main():
     # Now we are ready!
     print("[INFO]: Setup complete...")
     # Run the simulator
-    run_simulator(sim, scene)
+
+    if os.path.isfile(args_cli.input_file):
+        motions = [args_cli.input_file]
+    else:
+        motions = glob.glob(f'{args_cli.input_file}/**/*.csv', recursive=True)
+
+    for motion in tqdm(motions):
+        basename = os.path.basename(motion).split('.')[0]
+        args_cli.output_name = f"source/robot_lab/robot_lab/tasks/manager_based/beyondamp/config/cyborg/motion/{basename}.npz"
+        print(args_cli.output_name)
+
+        run_simulator(motion, sim, scene)
 
 
+# python scripts/tools/beyondmimic/csv_to_npz.py -f /home/cyborg/Desktop/projects/AMP_mjlab/motion_data_csv/amp --input_fps 120
 if __name__ == "__main__":
     # run the main function
     main()

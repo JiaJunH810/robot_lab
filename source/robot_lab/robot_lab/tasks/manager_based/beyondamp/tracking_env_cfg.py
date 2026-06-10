@@ -88,11 +88,16 @@ class MySceneCfg(InteractiveSceneCfg):
 class CommandsCfg:
     """Command specifications for the MDP."""
 
-    motion = mdp.MotionCommandCfg(
+    motion = mdp.LocomotionCommandCfg(
         asset_name="robot",
-        resampling_time_range=(1.0e9, 1.0e9),
+        resampling_time_range=(3.0, 8.0),
+        ranges=mdp.LocomotionCommandCfg.Ranges(
+            lin_vel_x=(-1.5, 3.0),
+            lin_vel_y=(-1.0, 1.0),
+            ang_vel_z=(-1.57, 1.57),
+        ),
+        rel_standing_envs=0.05,
         debug_vis=True,
-        delay_reset_env_ratio=DELAY_RESET_ENV_RATIO,
         pose_range={
             "x": (0.0, 0.0),
             "y": (0.0, 0.0),
@@ -127,6 +132,7 @@ class ObservationsCfg:
     @configclass
     class PolicyCfg(ObsGroup):
         """Observations for policy group."""
+        command = ObsTerm(func=mdp.generated_commands, params={"command_name": "motion"})
         base_ang_vel = ObsTerm(func=mdp.base_ang_vel, noise=Unoise(n_min=-0.2, n_max=0.2))
         projected_gravity = ObsTerm(func=mdp.projected_gravity, noise=Unoise(n_min=-0.05, n_max=0.05))
         joint_pos = ObsTerm(func=mdp.joint_pos_rel, noise=Unoise(n_min=-0.01, n_max=0.01))
@@ -140,6 +146,7 @@ class ObservationsCfg:
 
     @configclass
     class CriticCfg(ObsGroup):
+        command = ObsTerm(func=mdp.generated_commands, params={"command_name": "motion"})
         base_ang_vel = ObsTerm(func=mdp.base_ang_vel)
         projected_gravity = ObsTerm(func=mdp.projected_gravity)
         joint_pos = ObsTerm(func=mdp.joint_pos_rel)
@@ -213,6 +220,12 @@ class EventCfg:
         }
     )
 
+    reset_from_motion = EventTerm(
+        func=mdp.reset_from_motion,
+        mode="reset",
+        params={"command_name": "motion"},
+    )
+
 
 @configclass
 class RewardsCfg:
@@ -239,6 +252,40 @@ class RewardsCfg:
     )
 
     # Tracking
+    track_anchor_linear_velocity = RewTerm(
+        func=mdp.track_anchor_linear_velocity,
+        weight=1.0,
+        params={
+            "std": 1.0,
+            "command_name": "motion",
+            "mask_delay": True,
+            "delay_env_rew_ratio": 0.0,
+            "asset_cfg": SceneEntityCfg("robot"),
+            "anchor_cfg": SceneEntityCfg("robot", body_names=["base_link"]),
+        },
+    )
+    track_anchor_angular_velocity = RewTerm(
+        func=mdp.track_anchor_angular_velocity,
+        weight=1.0,
+        params={
+            "std": 3.14,
+            "command_name": "motion",
+            "mask_delay": True,
+            "delay_env_rew_ratio": 0.0,
+            "asset_cfg": SceneEntityCfg("robot"),
+            "anchor_cfg": SceneEntityCfg("robot", body_names=["base_link"]),
+        },
+    )
+    body_ang_vel_xy_l2 = RewTerm(
+        func=mdp.body_ang_vel_xy_l2,
+        weight=0.5,
+        params={
+            "std": 3.14,
+            "mask_delay": True,
+            "delay_env_rew_ratio": 0.0,
+            "body_cfg": SceneEntityCfg("robot", body_names=["base_link"]),
+        },
+    )
 
     # Others
     self_collisions = RewTerm(

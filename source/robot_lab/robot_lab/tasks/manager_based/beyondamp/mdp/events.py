@@ -13,6 +13,7 @@ from isaaclab.managers import SceneEntityCfg
 if TYPE_CHECKING:
     from isaaclab.envs import ManagerBasedEnv
 
+from robot_lab.tasks.manager_based.beyondamp.mdp.commands import LocomotionCommand
 from robot_lab.tasks.manager_based.beyondamp.mdp.terminations import DelayedTerminationManager
 
 def randomize_joint_default_pos(
@@ -64,10 +65,23 @@ def set_delay_termination(
     num_delay = int(env.num_envs * delay_reset_env_ratio)
 
     if num_delay > 0 and max_delay_steps > 0:
-        delay_mask = torch.arange(env.num_envs, device=env.device) < num_delay
+        delay_mask = torch.zeros(env.num_envs, dtype=torch.bool, device=env.device)
+        delay_mask[torch.randperm(env.num_envs, device=env.device)[:num_delay]] = True
 
         env.termination_manager = DelayedTerminationManager(
             base=env.termination_manager,
             delay_env_mask=delay_mask,
             max_delay_steps=max_delay_steps
         )
+
+
+def reset_from_motion(
+    env: ManagerBasedEnv,
+    env_ids: torch.Tensor | None,
+    command_name: str = "motion",
+) -> None:
+    """Reset robot state from random motion frames (called on env reset)."""
+    if env_ids is None or len(env_ids) == 0:
+        return
+    cmd: LocomotionCommand = env.command_manager.get_term(command_name)
+    cmd.reset_from_motion(env_ids)

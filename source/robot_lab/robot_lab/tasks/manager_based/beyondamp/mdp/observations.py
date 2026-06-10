@@ -8,20 +8,20 @@ from typing import TYPE_CHECKING
 
 from isaaclab.utils.math import matrix_from_quat, quat_apply_inverse, subtract_frame_transforms
 
-from robot_lab.tasks.manager_based.beyondamp.mdp.commands import MotionCommand
+from robot_lab.tasks.manager_based.beyondamp.mdp.commands import LocomotionCommand
 
 if TYPE_CHECKING:
     from isaaclab.envs import ManagerBasedEnv
 
 
 def robot_anchor_ori_w(env: ManagerBasedEnv, command_name: str) -> torch.Tensor:
-    command: MotionCommand = env.command_manager.get_term(command_name)
+    command: LocomotionCommand = env.command_manager.get_term(command_name)
     mat = matrix_from_quat(command.robot_anchor_quat_w)
     return mat[..., :2].reshape(mat.shape[0], -1)
 
 
 def robot_body_pos_b(env: ManagerBasedEnv, command_name: str) -> torch.Tensor:
-    command: MotionCommand = env.command_manager.get_term(command_name)
+    command: LocomotionCommand = env.command_manager.get_term(command_name)
 
     num_bodies = len(command.cfg.body_names)
     pos_b, _ = subtract_frame_transforms(
@@ -35,7 +35,7 @@ def robot_body_pos_b(env: ManagerBasedEnv, command_name: str) -> torch.Tensor:
 
 
 def robot_body_ori_b(env: ManagerBasedEnv, command_name: str) -> torch.Tensor:
-    command: MotionCommand = env.command_manager.get_term(command_name)
+    command: LocomotionCommand = env.command_manager.get_term(command_name)
 
     num_bodies = len(command.cfg.body_names)
     _, ori_b = subtract_frame_transforms(
@@ -54,7 +54,7 @@ def robot_body_lin_vel_b(env: ManagerBasedEnv, command_name: str) -> torch.Tenso
     对 world 系速度做 quat_apply_inverse(body_quat_w) 转到各身体的局部坐标系。
     Returns: (num_envs, num_key_bodies * 3)
     """
-    command: MotionCommand = env.command_manager.get_term(command_name)
+    command: LocomotionCommand = env.command_manager.get_term(command_name)
     body_lin_vel_w = command.robot_body_lin_vel_w
     body_quat_w = command.robot_body_quat_w
 
@@ -71,7 +71,7 @@ def robot_body_ang_vel_b(env: ManagerBasedEnv, command_name: str) -> torch.Tenso
 
     Returns: (num_envs, num_key_bodies * 3)
     """
-    command: MotionCommand = env.command_manager.get_term(command_name)
+    command: LocomotionCommand = env.command_manager.get_term(command_name)
     body_ang_vel_w = command.robot_body_ang_vel_w
     body_quat_w = command.robot_body_quat_w
 

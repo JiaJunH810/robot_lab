@@ -45,6 +45,128 @@ def track_root_height(env: ManagerBasedRLEnv, std: float, asset_cfg: SceneEntity
     return reward
 
 
+# ---- Delay env helpers ----
+
+def _get_delay_env_mask(env: ManagerBasedRLEnv) -> torch.Tensor | None:
+    """Get mask of delay envs currently in the buffer period."""
+    from robot_lab.tasks.manager_based.beyondamp.mdp.terminations import DelayedTerminationManager
+    tm = env.termination_manager
+    if isinstance(tm, DelayedTerminationManager):
+        return tm._delay_env_mask & (tm._delay_counters > 0)
+    return None
+
+
+def _apply_delay_env_reward_scaling(
+    env: ManagerBasedRLEnv,
+    reward: torch.Tensor,
+    mask_delay: bool,
+    delay_env_rew_ratio: float,
+) -> torch.Tensor:
+    """Scale reward for delay envs by delay_env_rew_ratio.
+
+    When mask_delay=True and ratio=0.0, delay envs get 0 reward.
+    Used for velocity tracking — fallen envs can't track velocity.
+    """
+    if not mask_delay:
+        return reward
+    delay_mask = _get_delay_env_mask(env)
+    if delay_mask is None:
+        return reward
+    return torch.where(delay_mask, reward * delay_env_rew_ratio, reward)
+
+
+# ---- Velocity tracking rewards ----
+
+
+def track_anchor_linear_velocity(
+    env: ManagerBasedRLEnv,
+    std: float,
+    command_name: str,
+    mask_delay: bool = False,
+    delay_env_rew_ratio: float = 1.0,
+    asset_cfg: SceneEntityCfg = SceneEntityCfg("robot"),
+    anchor_cfg: SceneEntityCfg = SceneEntityCfg("robot", body_names=[]),
+) -> torch.Tensor:
+    """Track xy linear velocity command in world frame.
+
+    Command is specified in body frame (vx, vy, 0); transformed to world
+    frame using the anchor body's yaw quaternion, then compared against
+    the robot's actual anchor linear velocity.
+    """
+    from isaaclab.utils.math import quat_apply_yaw
+
+    asset = env.scene[asset_cfg.name]
+    command = env.command_manager.get_command(command_name)
+
+    # Command in body frame (vx, vy, 0) → world frame via yaw-only rotation
+    cmd_xyz_b = torch.cat([command[:, :2], torch.zeros_like(command[:, :1])], dim=-1)
+    anchor_quat_w = asset.data.body_quat_w[:, anchor_cfg.body_ids[0]]
+    cmd_xyz_w = quat_apply_yaw(anchor_quat_w, cmd_xyz_b)
+
+    lin_vel_error = torch.sum(
+        torch.square(cmd_xyz_w - asset.data.body_lin_vel_w[:, anchor_cfg.body_ids[0]]),
+        dim=1,
+    )
+    reward = torch.exp(-lin_vel_error / std**2)
+    return _apply_delay_env_reward_scaling(env, reward, mask_delay, delay_env_rew_ratio)
+
+
+def track_anchor_angular_velocity(
+    env: ManagerBasedRLEnv,
+    std: float,
+    command_name: str,
+    mask_delay: bool = False,
+    delay_env_rew_ratio: float = 1.0,
+    asset_cfg: SceneEntityCfg = SceneEntityCfg("robot"),
+    anchor_cfg: SceneEntityCfg = SceneEntityCfg("robot", body_names=[]),
+) -> torch.Tensor:
+    """Track yaw angular velocity + suppress roll/pitch in body frame.
+
+    Error has two components:
+      1. z: command yaw rate vs actual anchor angular velocity z (world frame)
+      2. xy: body-frame roll/pitch angular velocity (target = 0, suppress wobble)
+    """
+    from isaaclab.utils.math import quat_apply_inverse
+
+    asset = env.scene[asset_cfg.name]
+    command = env.command_manager.get_command(command_name)
+
+    anchor_ang_vel_w = asset.data.body_ang_vel_w[:, anchor_cfg.body_ids[0]]
+    ang_vel_z_error = torch.square(command[:, 2] - anchor_ang_vel_w[:, 2])
+
+    # xy: body-frame roll/pitch angular velocity, target = 0
+    anchor_ang_vel_b = quat_apply_inverse(
+        asset.data.body_quat_w[:, anchor_cfg.body_ids[0]],
+        anchor_ang_vel_w,
+    )
+    ang_vel_xy_error = torch.sum(torch.square(anchor_ang_vel_b[:, :2]), dim=-1)
+
+    total_error = ang_vel_z_error + ang_vel_xy_error
+    reward = torch.exp(-total_error / std**2)
+    return _apply_delay_env_reward_scaling(env, reward, mask_delay, delay_env_rew_ratio)
+
+
+def body_ang_vel_xy_l2(
+    env: ManagerBasedRLEnv,
+    std: float,
+    mask_delay: bool = False,
+    delay_env_rew_ratio: float = 1.0,
+    body_cfg: SceneEntityCfg = SceneEntityCfg("robot", body_names=[]),
+) -> torch.Tensor:
+    """Suppress roll/pitch angular velocity of a specified body (e.g. base_link)."""
+    from isaaclab.utils.math import quat_apply_inverse
+
+    asset = env.scene[body_cfg.name]
+    body_ang_vel_w = asset.data.body_ang_vel_w[:, body_cfg.body_ids[0]]
+    body_ang_vel_b = quat_apply_inverse(
+        asset.data.body_quat_w[:, body_cfg.body_ids[0]],
+        body_ang_vel_w,
+    )
+    ang_vel_xy_error = torch.sum(torch.square(body_ang_vel_b[:, :2]), dim=-1)
+    reward = torch.exp(-ang_vel_xy_error / std**2)
+    return _apply_delay_env_reward_scaling(env, reward, mask_delay, delay_env_rew_ratio)
+
+
 def self_collisions(env: ManagerBasedRLEnv, sensor_cfg: SceneEntityCfg, threshold: float) -> torch.Tensor:
     """Penalize self-collisions indicated by contact on arm/waist bodies."""
     contact_sensor: ContactSensor = env.scene.sensors[sensor_cfg.name]
