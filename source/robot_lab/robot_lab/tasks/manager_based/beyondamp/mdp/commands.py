@@ -20,9 +20,78 @@ from isaaclab.utils.math import (
     sample_uniform,
 )
 
+from robot_lab.tasks.manager_based.beyondamp.mdp.terminations import DelayedTerminationManager
+
 
 if TYPE_CHECKING:
     from isaaclab.envs import ManagerBasedRLEnv
+
+Category = {
+    "recovery": [],
+    "walk": []
+}
+
+
+class CategoryView:
+    """Zero-copy view into one category's frames within the parent MotionLoader.
+
+    Delegates all data property access to the parent, automatically slicing
+    tensors to only include frames belonging to this category.  Non-tensor
+    attributes (e.g. ``fps``) pass through unchanged.
+
+    Usage::
+
+        loader = MotionLoader(".../motion/", body_indexes)
+        loader.walk.joint_pos     # → only walk frames
+        loader.recovery.body_pos_w  # → only recovery frames
+        loader.joint_pos          # → all frames (parent directly)
+    """
+
+    def __init__(self, parent: "MotionLoader", clip_indices: torch.Tensor):
+        self._p = parent
+        self._clip_idx = clip_indices
+
+        # Filtered file list — shadow parent's so __getattr__ doesn't leak all files
+        self.files = [parent.files[i] for i in clip_indices.tolist()]
+
+        # Per-category clip metadata (local to this category)
+        self.time_step_total = parent.time_step_total[clip_indices]
+        self.num_motions = len(clip_indices)
+
+        if self.num_motions == 0:
+            # Empty category — create zero-length placeholders
+            empty = torch.zeros(0, dtype=torch.long, device=clip_indices.device)
+            self.motion_starts = empty
+            self.motion_starts_global = empty
+            self._frame_idx = empty
+            self.total_frames = 0
+            return
+
+        self.motion_starts = torch.cat([
+            torch.tensor([0], device=clip_indices.device),
+            torch.cumsum(self.time_step_total, dim=0)[:-1],
+        ])
+        self.total_frames = int(self.time_step_total.sum().item())
+
+        # Clip starts in parent's global frame coordinates (for reset_from_motion)
+        self.motion_starts_global = parent.motion_starts[clip_indices]
+
+        # Global frame indices: positions of this category's frames in parent tensors
+        frames: list[torch.Tensor] = []
+        for i in clip_indices:
+            s = int(parent.motion_starts[i].item())
+            length = int(parent.time_step_total[i].item())
+            frames.append(torch.arange(s, s + length, device=clip_indices.device))
+        self._frame_idx = torch.cat(frames)  # shape: (total_frames,)
+
+    def __getattr__(self, name: str):
+        # Block access to private internals (except _body_indexes used by properties)
+        if name.startswith("_") and name != "_body_indexes":
+            raise AttributeError(name)
+        attr = getattr(self._p, name)
+        if isinstance(attr, torch.Tensor):
+            return attr[self._frame_idx]
+        return attr
 
 
 class MotionLoader:
@@ -56,9 +125,21 @@ class MotionLoader:
         self._body_lin_vel_b = []
         self._body_ang_vel_b = []
 
-        for motion_file in files:
+        # Local category index accumulator (don't mutate module-level Category)
+        cat_indices = {name: [] for name in Category}
+        fps = None
+
+        for idx, motion_file in enumerate(files):
+            category = os.path.basename(os.path.dirname(motion_file))
+            assert category in Category, f"Unknown motion category '{category}' from {motion_file}"
+            cat_indices[category].append(idx)
+
             data = np.load(motion_file)
-            self.fps = data["fps"]
+            if fps is None:
+                fps = data["fps"]
+            else:
+                assert data["fps"] == fps, f"FPS mismatch: expected {fps}, got {data['fps']} from {motion_file}"
+
             self.joint_pos.append(torch.tensor(data["joint_pos"], dtype=torch.float32, device=device))
             self.joint_vel.append(torch.tensor(data["joint_vel"], dtype=torch.float32, device=device))
             self._body_pos_w.append(torch.tensor(data["body_pos_w"], dtype=torch.float32, device=device))
@@ -71,6 +152,9 @@ class MotionLoader:
             self._body_lin_vel_b.append(torch.tensor(data["body_lin_vel_b"], dtype=torch.float32, device=device))
             self._body_ang_vel_b.append(torch.tensor(data["body_ang_vel_b"], dtype=torch.float32, device=device))
             self.time_step_total.append(data["joint_pos"].shape[0])
+        for key in cat_indices:
+            cat_indices[key] = torch.tensor(cat_indices[key], dtype=torch.long, device=device)
+        self.fps = fps
 
         self._body_indexes = body_indexes
         self.joint_pos = torch.cat(self.joint_pos, dim=0)
@@ -86,10 +170,12 @@ class MotionLoader:
         self._body_ang_vel_b = torch.cat(self._body_ang_vel_b, dim=0)
         self.time_step_total = torch.tensor(self.time_step_total, device=device, dtype=torch.long)
         self.total_frames = self.joint_pos.shape[0]
-        self.motion_starts = torch.cat(
-            [torch.tensor([0], device=device), torch.cumsum(self.time_step_total, dim=0)[:-1]]
-        )
+        self.motion_starts = torch.cat([torch.tensor([0], device=device), torch.cumsum(self.time_step_total, dim=0)[:-1]])
         self.num_motions = len(files)
+
+        # Create zero-copy category views (e.g. self.walk, self.recovery)
+        for cat_name, clip_idx in cat_indices.items():
+            setattr(self, cat_name, CategoryView(self, clip_idx))
 
     @property
     def body_pos_w(self) -> torch.Tensor:
@@ -207,17 +293,51 @@ class LocomotionCommand(CommandTerm):
     def robot_anchor_ang_vel_w(self) -> torch.Tensor:
         return self.robot.data.body_ang_vel_w[:, self.robot_anchor_body_index]
 
+    # ---- Delay env mask ----
+
+    def _get_delay_env_mask(self) -> torch.Tensor:
+        """Return the delay-env boolean mask from DelayedTerminationManager.
+
+        Returns all-False if the termination manager hasn't been wrapped yet
+        (e.g. during __init__ before the first reset).
+        """
+        term_mgr = self._env.termination_manager
+        if isinstance(term_mgr, DelayedTerminationManager):
+            return term_mgr._delay_env_mask
+        return torch.zeros(self.num_envs, dtype=torch.bool, device=self.device)
+
     # ---- Robot state reset from motion data (called by event) ----
 
     def reset_from_motion(self, env_ids: Sequence[int]):
-        """Reset robot state from random frames within each env's assigned motion."""
+        """Reset robot state from random frames within each env's assigned motion.
+
+        Delay envs sample from recovery motions; normal envs sample from walk
+        motions.  Each env is round-robin assigned a clip within its category.
+        """
         if len(env_ids) == 0:
             return
 
-        starts = self._motion_starts[env_ids]
-        lengths = self._motion_lengths[env_ids]
-        local_idx = (torch.rand(len(env_ids), device=self.device) * (lengths.float() - 1)).long()
-        idx = starts + local_idx
+        delay_mask = self._get_delay_env_mask()
+
+        # Per-env round-robin: delay→recovery, normal→walk
+        walk_ids = torch.arange(self.num_envs, device=self.device) % self.motion.walk.num_motions
+        rec_ids = torch.arange(self.num_envs, device=self.device) % self.motion.recovery.num_motions
+
+        starts = torch.where(
+            delay_mask,
+            self.motion.recovery.motion_starts_global[rec_ids],
+            self.motion.walk.motion_starts_global[walk_ids],
+        )
+        lengths = torch.where(
+            delay_mask,
+            self.motion.recovery.time_step_total[rec_ids],
+            self.motion.walk.time_step_total[walk_ids],
+        )
+
+        s = starts[env_ids]
+        l = lengths[env_ids]
+        local_idx = (torch.rand(len(env_ids), device=self.device) * (l.float() - 1)).long()
+        idx = s + local_idx
 
         anchor_idx = self.motion_anchor_body_index
         root_pos = self.motion.body_pos_w[idx, anchor_idx].clone()
