@@ -31,7 +31,7 @@ import robot_lab.tasks.manager_based.beyondamp.obs_groups as amp_groups
 # Scene definition
 ##
 
-DELAY_RESET_ENV_RATIO = 0.5
+DELAY_RESET_ENV_RATIO = 0.4
 
 VELOCITY_RANGE = {
     "x": (-0.5, 0.5),
@@ -244,7 +244,7 @@ class RewardsCfg:
         func=mdp.track_root_height,
         weight=1.0,
         params={
-            "std": 0.6,
+            "std": 0.3,
             "asset_cfg": SceneEntityCfg("robot"),
             "mask_delay": True,
             "delay_env_rew_ratio": 3.5,
@@ -288,6 +288,15 @@ class RewardsCfg:
     )
 
     # Others
+    feet_slide = RewTerm(
+        func=mdp.feet_slide,
+        weight=-0.25,
+        params={
+            "sensor_cfg": SceneEntityCfg("contact_forces", body_names=["ankle_l_roll_link", "ankle_r_roll_link"]),
+            "asset_cfg": SceneEntityCfg("robot", body_names=["ankle_l_roll_link", "ankle_r_roll_link"]),
+        },
+    )
+
     self_collisions = RewTerm(
         func=mdp.self_collisions,
         weight=-0.1,
