@@ -101,12 +101,14 @@ class MotionLoader:
     global frame indices can be used to sample across all motions uniformly.
     """
 
-    def __init__(self, motion_file: str, body_indexes: Sequence[int], device: str = "cpu"):
+    def __init__(self, motion_file: str, body_indexes: Sequence[int],
+                 anchor_body_index: int = 0, device: str = "cpu"):
         if os.path.isfile(motion_file):
             files = glob.glob(motion_file)
         else:
             files = glob.glob(f"{motion_file}/**/*.npz", recursive=True)
         assert len(files) != 0, f"Invalid file path: {motion_file}"
+        self._anchor_body_index = anchor_body_index
         self._init_from_files(files, body_indexes, device)
 
     def _init_from_files(self, files: list[str], body_indexes: Sequence[int], device: str):
@@ -213,6 +215,19 @@ class MotionLoader:
     def body_ang_vel_b(self) -> torch.Tensor:
         return self._body_ang_vel_b[:, self._body_indexes]
 
+    @property
+    def body_pos_w_rel_z(self) -> torch.Tensor:
+        """World-frame z of each key body relative to the anchor body.
+
+        Positive = body is above anchor in world frame (e.g. headstand).
+        Negative = body is below anchor (normal standing).
+
+        Returns: (num_frames, num_key_bodies)
+        """
+        bpw = self.body_pos_w  # (num_frames, num_key_bodies, 3)
+        anchor_z = bpw[:, self._anchor_body_index:self._anchor_body_index + 1, 2]
+        return bpw[:, :, 2] - anchor_z
+
 
 class LocomotionCommand(CommandTerm):
     """Combined motion + velocity command, matching AMP_mjlab architecture.
@@ -235,7 +250,9 @@ class LocomotionCommand(CommandTerm):
             self.robot.find_bodies(self.cfg.body_names, preserve_order=True)[0], dtype=torch.long, device=self.device
         )
 
-        self.motion = MotionLoader(self.cfg.motion_file, self.body_indexes, device=self.device)
+        self.motion = MotionLoader(self.cfg.motion_file, self.body_indexes,
+                                   anchor_body_index=self.motion_anchor_body_index,
+                                   device=self.device)
 
         # Round-robin assign each env to a motion
         self.motion_ids = torch.arange(self.num_envs, device=self.device) % self.motion.num_motions

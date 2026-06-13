@@ -81,3 +81,19 @@ def robot_body_ang_vel_b(env: ManagerBasedEnv, command_name: str) -> torch.Tenso
         body_ang_vel_w.reshape(-1, 3),
     ).reshape(num_envs_, num_bodies, 3)
     return body_ang_vel_b.reshape(num_envs_, -1)
+
+
+def robot_body_pos_w_rel_z(env: ManagerBasedEnv, command_name: str) -> torch.Tensor:
+    """World-frame z of each key body relative to the anchor body.
+
+    Gives the discriminator world-frame orientation awareness. When the
+    robot headstands, ankles are above the anchor (positive z), unlike
+    normal standing where all bodies are below the anchor.
+
+    Returns: (num_envs, num_key_bodies)
+    """
+    command: LocomotionCommand = env.command_manager.get_term(command_name)
+    bpw = command.robot_body_pos_w  # (num_envs, num_key_bodies, 3)
+    anchor_idx = command.motion_anchor_body_index
+    anchor_z = bpw[:, anchor_idx:anchor_idx + 1, 2]
+    return bpw[:, :, 2] - anchor_z
