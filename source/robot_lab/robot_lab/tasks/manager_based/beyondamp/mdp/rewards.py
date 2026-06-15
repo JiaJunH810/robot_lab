@@ -80,6 +80,7 @@ def track_head_height(
 
     # Head world position = root_pos + rotate(root_quat, head_offset_local)
     head_offset_local = torch.tensor(head_offset, device=env.device, dtype=root_pos.dtype)
+    head_offset_local = head_offset_local.expand(root_pos.shape[0], -1)
     head_pos_w = root_pos + math_utils.quat_apply(root_quat, head_offset_local)
 
     desired_head_z = asset.data.default_root_state[:, 2] + head_offset[2]
