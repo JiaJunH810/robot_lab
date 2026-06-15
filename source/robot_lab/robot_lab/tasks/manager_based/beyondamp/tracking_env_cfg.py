@@ -259,7 +259,7 @@ class RewardsCfg:
             "head_offset": (-0.01, 0.0, 0.6907),
             "asset_cfg": SceneEntityCfg("robot"),
             "mask_delay": True,
-            "delay_env_rew_ratio": 3.5,
+            "delay_env_rew_ratio": 6,
         },
     )
 
