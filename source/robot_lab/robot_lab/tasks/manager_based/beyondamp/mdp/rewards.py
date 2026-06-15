@@ -47,20 +47,20 @@ def track_root_height(env: ManagerBasedRLEnv, std: float, asset_cfg: SceneEntity
     return reward
 
 
-def track_body_height(
+def track_head_height(
     env: ManagerBasedRLEnv,
     std: float,
-    height_offset: float,
+    head_offset: tuple[float, float, float],
     mask_delay: bool = False,
     delay_env_rew_ratio: float = 1.0,
     asset_cfg: SceneEntityCfg = SceneEntityCfg("robot"),
-    body_cfg: SceneEntityCfg = SceneEntityCfg("robot", body_names=[]),
 ) -> torch.Tensor:
-    """Reward for maintaining a body at its default height relative to the root.
+    """Reward for maintaining head at its default height above the root.
 
-    The desired height is computed as the default root height plus a fixed
-    offset that represents the kinematic chain distance from root to the
-    target body in the default zero-joint configuration.
+    Head world position is computed by applying the root's orientation to a
+    fixed local offset (head position in root frame), then adding root
+    position. The reward penalises deviation of the resulting head Z from
+    the default root Z plus the offset's z-component.
 
     When mask_delay=True, only delay envs currently in the buffer period
     receive the reward (amplified by delay_env_rew_ratio). Normal envs and
@@ -69,16 +69,22 @@ def track_body_height(
     Args:
         env: The reinforcement learning environment.
         std: Standard deviation for the Gaussian reward kernel.
-        height_offset: Z-offset from root to target body in default pose (meters).
+        head_offset: (x, y, z) offset of head from root in root local frame.
         mask_delay: Whether to zero out reward for non-delay environments.
         delay_env_rew_ratio: Reward multiplier for delay environments in buffer.
         asset_cfg: Scene entity configuration for the robot asset.
-        body_cfg: Scene entity configuration specifying which body to track.
     """
     asset = env.scene[asset_cfg.name]
-    desired_height = asset.data.default_root_state[:, 2] + height_offset
-    cur_body_height = asset.data.body_pos_w[:, body_cfg.body_ids[0], 2]
-    height_error = torch.square(desired_height - cur_body_height)
+    root_pos = asset.data.root_pos_w
+    root_quat = asset.data.root_quat_w
+
+    # Head world position = root_pos + rotate(root_quat, head_offset_local)
+    head_offset_local = torch.tensor(head_offset, device=env.device, dtype=root_pos.dtype)
+    head_pos_w = root_pos + math_utils.quat_apply(root_quat, head_offset_local)
+
+    desired_head_z = asset.data.default_root_state[:, 2] + head_offset[2]
+    cur_head_z = head_pos_w[:, 2]
+    height_error = torch.square(desired_head_z - cur_head_z)
     reward = torch.exp(-height_error / std**2)
 
     if mask_delay:
