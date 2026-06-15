@@ -47,6 +47,50 @@ def track_root_height(env: ManagerBasedRLEnv, std: float, asset_cfg: SceneEntity
     return reward
 
 
+def track_body_height(
+    env: ManagerBasedRLEnv,
+    std: float,
+    height_offset: float,
+    mask_delay: bool = False,
+    delay_env_rew_ratio: float = 1.0,
+    asset_cfg: SceneEntityCfg = SceneEntityCfg("robot"),
+    body_cfg: SceneEntityCfg = SceneEntityCfg("robot", body_names=[]),
+) -> torch.Tensor:
+    """Reward for maintaining a body at its default height relative to the root.
+
+    The desired height is computed as the default root height plus a fixed
+    offset that represents the kinematic chain distance from root to the
+    target body in the default zero-joint configuration.
+
+    When mask_delay=True, only delay envs currently in the buffer period
+    receive the reward (amplified by delay_env_rew_ratio). Normal envs and
+    delay envs that have already recovered get zero.
+
+    Args:
+        env: The reinforcement learning environment.
+        std: Standard deviation for the Gaussian reward kernel.
+        height_offset: Z-offset from root to target body in default pose (meters).
+        mask_delay: Whether to zero out reward for non-delay environments.
+        delay_env_rew_ratio: Reward multiplier for delay environments in buffer.
+        asset_cfg: Scene entity configuration for the robot asset.
+        body_cfg: Scene entity configuration specifying which body to track.
+    """
+    asset = env.scene[asset_cfg.name]
+    desired_height = asset.data.default_root_state[:, 2] + height_offset
+    cur_body_height = asset.data.body_pos_w[:, body_cfg.body_ids[0], 2]
+    height_error = torch.square(desired_height - cur_body_height)
+    reward = torch.exp(-height_error / std**2)
+
+    if mask_delay:
+        from robot_lab.tasks.manager_based.beyondamp.mdp.terminations import DelayedTerminationManager
+        tm = env.termination_manager
+        if isinstance(tm, DelayedTerminationManager):
+            in_buffer = tm._delay_env_mask & (tm._delay_counters > 0)
+            reward = torch.where(in_buffer, reward * delay_env_rew_ratio, torch.zeros_like(reward))
+
+    return reward
+
+
 # ---- Delay env helpers ----
 
 def _get_delay_env_mask(env: ManagerBasedRLEnv) -> torch.Tensor | None:
