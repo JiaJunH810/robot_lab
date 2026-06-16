@@ -31,7 +31,7 @@ import robot_lab.tasks.manager_based.beyondamp.obs_groups as amp_groups
 # Scene definition
 ##
 
-DELAY_RESET_ENV_RATIO = 0.4
+DELAY_RESET_ENV_RATIO = 0.8
 
 VELOCITY_RANGE = {
     "x": (-0.5, 0.5),
@@ -244,7 +244,7 @@ class RewardsCfg:
         func=mdp.track_root_height,
         weight=1.0,
         params={
-            "std": 1.0,
+            "std": 0.65,
             "asset_cfg": SceneEntityCfg("robot"),
             "mask_delay": True,
             "delay_env_rew_ratio": 3.5,
@@ -259,7 +259,7 @@ class RewardsCfg:
             "head_offset": (-0.01, 0.0, 0.6907),
             "asset_cfg": SceneEntityCfg("robot"),
             "mask_delay": True,
-            "delay_env_rew_ratio": 6,
+            "delay_env_rew_ratio": 4,
         },
     )
 
@@ -338,7 +338,7 @@ class TerminationsCfg:
     )
     bad_base_height = DoneTerm(
         func=mdp.root_height_below_minimum,
-        params={"minimum_height": 0.60, "asset_cfg": SceneEntityCfg("robot")},
+        params={"minimum_height": 0.70, "asset_cfg": SceneEntityCfg("robot")},
     )
 
 
