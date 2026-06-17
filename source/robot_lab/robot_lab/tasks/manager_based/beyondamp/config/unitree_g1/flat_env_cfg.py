@@ -42,6 +42,9 @@ class G1BeyondAMPFlatEnvCfg(CyborgEnvCfg):
         self.events.randomize_com_positions.params["asset_cfg"].body_names = ("pelvis",)
 
         # Override feet_slide body names
+        self.rewards.feet_slide.params["sensor_cfg"].body_names = [
+            "left_ankle_roll_link", "right_ankle_roll_link",
+        ]
         self.rewards.feet_slide.params["asset_cfg"].body_names = [
             "left_ankle_roll_link", "right_ankle_roll_link",
         ]
