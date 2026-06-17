@@ -31,7 +31,7 @@ import robot_lab.tasks.manager_based.beyondamp.obs_groups as amp_groups
 # Scene definition
 ##
 
-DELAY_RESET_ENV_RATIO = 0.8
+DELAY_RESET_ENV_RATIO = 0.4
 
 VELOCITY_RANGE = {
     "x": (-0.5, 0.5),
@@ -244,7 +244,7 @@ class RewardsCfg:
         func=mdp.track_root_height,
         weight=1.0,
         params={
-            "std": 0.65,
+            "std": 0.3,
             "asset_cfg": SceneEntityCfg("robot"),
             "mask_delay": True,
             "delay_env_rew_ratio": 3.5,
@@ -253,7 +253,7 @@ class RewardsCfg:
 
     track_head_height = RewTerm(
         func=mdp.track_head_height,
-        weight=1.0,
+        weight=0.0,
         params={
             "std": 1.0,
             "head_offset": (-0.01, 0.0, 0.6907),
