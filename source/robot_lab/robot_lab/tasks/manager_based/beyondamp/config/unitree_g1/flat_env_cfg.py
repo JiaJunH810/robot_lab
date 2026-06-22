@@ -28,7 +28,7 @@ class G1BeyondAMPFlatEnvCfg(CyborgEnvCfg):
         self.commands.motion.motion_file = f"{os.path.dirname(__file__)}/motion/"
         self.commands.motion.anchor_body_name = "torso_link"
         self.commands.motion.body_names = [
-            "pelvis",
+            "torso_link", "pelvis",
             "left_hip_roll_link", "left_knee_link", "left_ankle_roll_link",
             "right_hip_roll_link", "right_knee_link", "right_ankle_roll_link",
             "left_shoulder_roll_link", "left_elbow_link", "left_wrist_yaw_link",
