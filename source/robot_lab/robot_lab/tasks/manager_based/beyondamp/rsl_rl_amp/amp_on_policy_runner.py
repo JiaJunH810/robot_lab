@@ -150,15 +150,16 @@ class AMPOnPolicyRunner:
                 rnd_weight=self.alg.rnd.weight if self.cfg["algorithm"]["rnd_cfg"] else None,
             )
 
-            # Save model
-            # if self.logger.writer is not None and it % self.cfg["save_interval"] == 0:
-            #     self.save(os.path.join(self.logger.log_dir, f"model_{it}.pt"))  # type: ignore
+            # Save model every 1000 iterations (starting after iteration 20000)
+            if self.logger.writer is not None and it >= 20000 and it % 1000 == 0:
+                self.save(os.path.join(self.logger.log_dir, f"model_{it}.pt"))
 
+            # Save best-episode checkpoint (overwrites on new best)
             if len(self.logger.lenbuffer) > 0:
                 mean_len = statistics.mean(self.logger.lenbuffer)
                 if mean_len > greater_episode:
                     greater_episode = mean_len
-                    self.save(os.path.join(self.logger.log_dir, f"greater_episode.pt"))
+                    self.save(os.path.join(self.logger.log_dir, "greater_episode.pt"))
 
         # Save the final model after training and stop the logging writer
         if self.logger.writer is not None:

@@ -10,8 +10,8 @@ from robot_lab.tasks.manager_based.beyondamp.rsl_rl_amp.amp_vecenv_wrapper impor
 @configclass
 class CyborgBeyondAMPFlatPPORunnerCfg(RslRlOnPolicyRunnerCfg):
     num_steps_per_env = 24
-    max_iterations = 30000
-    save_interval = 500
+    max_iterations = 100000
+    save_interval = 10000
     experiment_name = "cyborg_beyondamp"
     runner_type = AMPOnPolicyRunner
     wrapper_type = AMPRslRlVecEnvWrapper

@@ -24,9 +24,9 @@ class G1BeyondAMPFlatEnvCfg(CyborgEnvCfg):
         self.scene.robot = UNITREE_G1_29DOF_CFG.replace(prim_path="{ENV_REGEX_NS}/Robot")
         self.actions.joint_pos.scale = UNITREE_G1_29DOF_ACTION_SCALE
 
-        # Motion (anchor is pelvis to match pre-processed motion data)
+        # Motion (anchor is torso_link to match AMP_mjlab reference frame)
         self.commands.motion.motion_file = f"{os.path.dirname(__file__)}/motion/"
-        self.commands.motion.anchor_body_name = "pelvis"
+        self.commands.motion.anchor_body_name = "torso_link"
         self.commands.motion.body_names = [
             "pelvis",
             "left_hip_roll_link", "left_knee_link", "left_ankle_roll_link",
@@ -56,7 +56,7 @@ class G1BeyondAMPFlatEnvCfg(CyborgEnvCfg):
         # G1 termination: minimum_height=0.5 (matches AMP_mjlab)
         self.terminations.bad_base_height.params["minimum_height"] = 0.5
 
-        # G1 track_anchor velocity/anchor config (pelvis as anchor)
-        self.rewards.track_anchor_linear_velocity.params["anchor_cfg"].body_names = ["pelvis"]
-        self.rewards.track_anchor_angular_velocity.params["anchor_cfg"].body_names = ["pelvis"]
-        self.rewards.body_ang_vel_xy_l2.params["body_cfg"].body_names = ["pelvis"]
+        # G1 track_anchor velocity/anchor config (torso_link as anchor, matches AMP_mjlab)
+        self.rewards.track_anchor_linear_velocity.params["anchor_cfg"].body_names = ["torso_link"]
+        self.rewards.track_anchor_angular_velocity.params["anchor_cfg"].body_names = ["torso_link"]
+        self.rewards.body_ang_vel_xy_l2.params["body_cfg"].body_names = ["torso_link"]
