@@ -92,6 +92,7 @@ class AMPOnPolicyRunner:
         start_it = self.current_learning_iteration
         total_it = start_it + num_learning_iterations
         greater_episode = 0
+        greater_episode_it = -1
         for it in range(start_it, total_it):
             start = time.time()
             # Rollout
@@ -157,9 +158,12 @@ class AMPOnPolicyRunner:
             # Save best-episode checkpoint (overwrites on new best)
             if len(self.logger.lenbuffer) > 0:
                 mean_len = statistics.mean(self.logger.lenbuffer)
+                print(f"[Iter {it}] episode_length={mean_len:.2f}  |  best_episode@{greater_episode_it}: {greater_episode:.2f}")
                 if mean_len > greater_episode:
                     greater_episode = mean_len
+                    greater_episode_it = it
                     self.save(os.path.join(self.logger.log_dir, "greater_episode.pt"))
+                    print(f"[INFO]: New best episode at iteration {it}: mean_episode_length = {greater_episode:.2f}")
 
         # Save the final model after training and stop the logging writer
         if self.logger.writer is not None:

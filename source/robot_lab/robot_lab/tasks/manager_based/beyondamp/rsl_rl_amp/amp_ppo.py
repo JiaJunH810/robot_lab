@@ -385,9 +385,6 @@ class AMPPPO:
 
             # 用运行均值-方差归一化器对真假数据做归一化
             if self.amp_normalizer is not None:
-                # 保存原始数据用于后续更新归一化器统计量
-                policy_state_raw = policy_state.clone()
-                expert_state_raw = expert_state.clone()
                 with torch.no_grad():
                     policy_state = self.amp_normalizer.normalize_torch(policy_state, self.device)
                     policy_next_state = self.amp_normalizer.normalize_torch(policy_next_state, self.device)
@@ -409,10 +406,10 @@ class AMPPPO:
             # 将 AMP loss 加入总损失
             loss = loss + amp_loss + grad_pen_loss
 
-            # 在线更新归一化器（使用原始未归一化的数据）
+            # 在线更新归一化器（使用归一化后的数据，同 AMP_mjlab 行为）
             if self.amp_normalizer is not None:
-                self.amp_normalizer.update(policy_state_raw.cpu().numpy())
-                self.amp_normalizer.update(expert_state_raw.cpu().numpy())
+                self.amp_normalizer.update(policy_state.cpu().numpy())
+                self.amp_normalizer.update(expert_state.cpu().numpy())
 
             # Symmetry loss
             if self.symmetry:
