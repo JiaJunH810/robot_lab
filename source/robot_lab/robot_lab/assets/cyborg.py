@@ -5,40 +5,47 @@ from isaaclab.assets.articulation import ArticulationCfg
 from robot_lab.assets import ISAACLAB_ASSETS_DATA_DIR
 
 
-# 下肢
-ARMATURE_6416 = 0.06581459643
-ARMATURE_10020_24 = 0.02773762228
-# 上肢
-ARMATURE_40_52 = 0.0744673
-ARMATURE_50_60 = 0.16199188
-ARMATURE_60_70 = 0.40273548
-ARMATURE_70_90 = 0.60838764
-ARMATURE_80_97 = 0.96945336
+# =============================================================================
+# Armature（等效转动惯量，kg·m²）
+# 来源：表二"总体所有转动惯量，换算到输出端" / 1e6
+# 电机型号对应关节：
+#   10020 (ratio 24): 髋、膝、腰
+#   6416  (ratio 25): 踝
+#   6416  (ratio 30.25): 肘
+#   8116  (ratio 18): 肩
+#   4310  (ratio 36): 腕
+# =============================================================================
+ARMATURE_10020_24  = 0.02773762228   # 10020, ratio 24
+ARMATURE_6416      = 0.06581459643   # 6416,  ratio 25
+ARMATURE_6416_3025 = 0.09503671824   # 6416,  ratio 30.25
+ARMATURE_8116      = 0.06399486      # 8116,  ratio 18 (中空)
+ARMATURE_4310      = 0.02422284137   # 4310,  ratio 36
 
-NATURAL_FREQ = 10 * 2.0 * 3.1415926535  # 10Hz
+# =============================================================================
+# PD 增益: stiffness = armature * ω², damping = 2ζ * armature * ω
+# ω = 10 Hz * 2π, ζ = 2.0 (临界阻尼)
+# =============================================================================
+NATURAL_FREQ = 10 * 2.0 * 3.141592653589793
 DAMPING_RATIO = 2.0
 
-STIFFNESS_6416 = ARMATURE_6416 * NATURAL_FREQ**2
-STIFFNESS_10020_24 = ARMATURE_10020_24 * NATURAL_FREQ**2
-STIFFNESS_40_52 = ARMATURE_40_52 * NATURAL_FREQ**2
-STIFFNESS_50_60 = ARMATURE_50_60 * NATURAL_FREQ**2
-STIFFNESS_60_70 = ARMATURE_60_70 * NATURAL_FREQ**2
-STIFFNESS_70_90 = ARMATURE_70_90 * NATURAL_FREQ**2
-STIFFNESS_80_97 = ARMATURE_80_97 * NATURAL_FREQ**2
+STIFFNESS_10020_24  = ARMATURE_10020_24  * NATURAL_FREQ ** 2
+STIFFNESS_6416      = ARMATURE_6416      * NATURAL_FREQ ** 2
+STIFFNESS_6416_3025 = ARMATURE_6416_3025 * NATURAL_FREQ ** 2
+STIFFNESS_8116      = ARMATURE_8116      * NATURAL_FREQ ** 2
+STIFFNESS_4310      = ARMATURE_4310      * NATURAL_FREQ ** 2
 
-DAMPING_6416 = 2.0 * DAMPING_RATIO * ARMATURE_6416 * NATURAL_FREQ
-DAMPING_10020_24 = 2.0 * DAMPING_RATIO * ARMATURE_10020_24 * NATURAL_FREQ
-DAMPING_40_52 = 2.0 * DAMPING_RATIO * ARMATURE_40_52 * NATURAL_FREQ
-DAMPING_50_60 = 2.0 * DAMPING_RATIO * ARMATURE_50_60 * NATURAL_FREQ
-DAMPING_60_70 = 2.0 * DAMPING_RATIO * ARMATURE_60_70 * NATURAL_FREQ
-DAMPING_70_90 = 2.0 * DAMPING_RATIO * ARMATURE_70_90 * NATURAL_FREQ
-DAMPING_80_97 = 2.0 * DAMPING_RATIO * ARMATURE_80_97 * NATURAL_FREQ
+DAMPING_10020_24  = 2.0 * DAMPING_RATIO * ARMATURE_10020_24  * NATURAL_FREQ
+DAMPING_6416      = 2.0 * DAMPING_RATIO * ARMATURE_6416      * NATURAL_FREQ
+DAMPING_6416_3025 = 2.0 * DAMPING_RATIO * ARMATURE_6416_3025 * NATURAL_FREQ
+DAMPING_8116      = 2.0 * DAMPING_RATIO * ARMATURE_8116      * NATURAL_FREQ
+DAMPING_4310      = 2.0 * DAMPING_RATIO * ARMATURE_4310      * NATURAL_FREQ
+
 
 CYBORG_BIPED_CFG = ArticulationCfg(
     spawn=sim_utils.UrdfFileCfg(
         fix_base=False,
         replace_cylinders_with_capsules=True,
-        asset_path=f"{ISAACLAB_ASSETS_DATA_DIR}/Robots/cyborg/biped_temp_1_0/urdf/biped_temp_1_0.urdf",
+        asset_path=f"{ISAACLAB_ASSETS_DATA_DIR}/Robots/cyborg/biped_ENX_1_0/urdf/biped_ENX_1_0.urdf",
         activate_contact_sensors=True,
         rigid_props=sim_utils.RigidBodyPropertiesCfg(
             disable_gravity=False,
@@ -65,6 +72,7 @@ CYBORG_BIPED_CFG = ArticulationCfg(
     ),
     soft_joint_pos_limit_factor=0.9,
     actuators={
+        # 髋 + 膝: EC-A10020-P2-24
         "legs": ImplicitActuatorCfg(
             joint_names_expr=[
                 "J_hip_.*_roll",
@@ -72,87 +80,56 @@ CYBORG_BIPED_CFG = ArticulationCfg(
                 "J_hip_.*_pitch",
                 "J_knee_.*_pitch",
             ],
-            effort_limit_sim={
-                "J_hip_.*_roll": 330.0,
-                "J_hip_.*_yaw": 330.0,
-                "J_hip_.*_pitch": 330.0,
-                "J_knee_.*_pitch": 330.0,
-            },
-            velocity_limit_sim={
-                "J_hip_.*_roll": 12.04,
-                "J_hip_.*_yaw": 12.04,
-                "J_hip_.*_pitch": 12.04,
-                "J_knee_.*_pitch": 12.04,
-            },
-            stiffness={
-                "J_hip_.*_roll": 250.0,
-                "J_hip_.*_yaw": 120.0,
-                "J_hip_.*_pitch": 300.0,
-                "J_knee_.*_pitch": 300.0,
-            },
-            damping={
-                "J_hip_.*_roll": 10.0,
-                "J_hip_.*_yaw": 10.0,
-                "J_hip_.*_pitch": 10.0,
-                "J_knee_.*_pitch": 10.0,
-            },
-            armature={
-                ".*": ARMATURE_10020_24,
-            },
+            effort_limit_sim=330.0,
+            velocity_limit_sim=12.043,
+            stiffness=STIFFNESS_10020_24,
+            damping=DAMPING_10020_24,
+            armature=ARMATURE_10020_24,
         ),
+        # 踝: EC-A6416-P2-25 (ratio 25)
         "feet": ImplicitActuatorCfg(
-            effort_limit_sim=120.0,
-            velocity_limit_sim=11.21,
             joint_names_expr=["J_ankle_.*_pitch", "J_ankle_.*_roll"],
-            stiffness=80.0,
-            damping=3.0,
+            effort_limit_sim=120.0,
+            velocity_limit_sim=11.205,
+            stiffness=STIFFNESS_6416,
+            damping=DAMPING_6416,
             armature=ARMATURE_6416,
         ),
+        # 腰: EC-A10020-P2-24
         "waist": ImplicitActuatorCfg(
             joint_names_expr=["J_waist_yaw", "J_waist_pitch"],
-            effort_limit_sim={
-                "J_waist_yaw": 144.0,
-                "J_waist_pitch": 165.0,
-            },
-            velocity_limit_sim={
-                "J_waist_yaw": 3.14,
-                "J_waist_pitch": 2.41,
-            },
-            stiffness=100.0,
-            damping=5.0,
-            armature=0.01,
+            effort_limit_sim=330.0,
+            velocity_limit_sim=12.043,
+            stiffness=STIFFNESS_10020_24,
+            damping=DAMPING_10020_24,
+            armature=ARMATURE_10020_24,
         ),
-        "arms": ImplicitActuatorCfg(
-            joint_names_expr=[
-                "J_arm_.*_01",
-                "J_arm_.*_02",
-                "J_arm_.*_03",
-                "J_arm_.*_04",
-                "J_arm_.*_05",
-                "J_arm_.*_06",
-                "J_arm_.*_07",
-            ],
-            effort_limit_sim={
-                "J_arm_.*_01": 144.0,
-                "J_arm_.*_02": 89.0,
-                "J_arm_.*_03": 60.0,
-                "J_arm_.*_04": 60.0,
-                "J_arm_.*_05": 31.0,
-                "J_arm_.*_06": 11.0,
-                "J_arm_.*_07": 11.0,
-            },
-            velocity_limit_sim={
-                "J_arm_.*_01": 3.14,
-                "J_arm_.*_02": 3.14,
-                "J_arm_.*_03": 3.04,
-                "J_arm_.*_04": 3.04,
-                "J_arm_.*_05": 3.45,
-                "J_arm_.*_06": 3.45,
-                "J_arm_.*_07": 3.45,
-            },
-            stiffness=50.0,
-            damping=2.0,
-            armature=0.005,
+        # 肩: EC-A8116-P1-18H (ratio 18)
+        "shoulders": ImplicitActuatorCfg(
+            joint_names_expr=["J_arm_.*_01", "J_arm_.*_02"],
+            effort_limit_sim=130.0,
+            velocity_limit_sim=13.823,
+            stiffness=STIFFNESS_8116,
+            damping=DAMPING_8116,
+            armature=ARMATURE_8116,
+        ),
+        # 肘: EC-A6416-P2-30.25H (ratio 30.25)
+        "elbows": ImplicitActuatorCfg(
+            joint_names_expr=["J_arm_.*_03", "J_arm_.*_04"],
+            effort_limit_sim=132.0,
+            velocity_limit_sim=10.158,
+            stiffness=STIFFNESS_6416_3025,
+            damping=DAMPING_6416_3025,
+            armature=ARMATURE_6416_3025,
+        ),
+        # 腕: EC-A4310-P2-36H (ratio 36)
+        "wrists": ImplicitActuatorCfg(
+            joint_names_expr=["J_arm_.*_05", "J_arm_.*_06", "J_arm_.*_07"],
+            effort_limit_sim=36.0,
+            velocity_limit_sim=7.854,
+            stiffness=STIFFNESS_4310,
+            damping=DAMPING_4310,
+            armature=ARMATURE_4310,
         ),
     },
 )
