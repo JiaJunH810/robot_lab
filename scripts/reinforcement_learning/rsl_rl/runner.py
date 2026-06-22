@@ -95,9 +95,11 @@ class Runner(OnPolicyRunner):
             # if self.logger.writer is not None and it % self.cfg["save_interval"] == 0:
             #     self.save(os.path.join(self.logger.log_dir, f"model_{it}.pt"))  # type: ignore
             
-            if statistics.mean(self.logger.lenbuffer) > greater_episode:
-                greater_episode = statistics.mean(self.logger.lenbuffer)
-                self.save(os.path.join(self.logger.log_dir, f"greater_episode.pt"))
+            if len(self.logger.lenbuffer) > 0:
+                mean_len = statistics.mean(self.logger.lenbuffer)
+                if mean_len > greater_episode:
+                    greater_episode = mean_len
+                    self.save(os.path.join(self.logger.log_dir, f"greater_episode.pt"))
 
         # Save the final model after training and stop the logging writer
         if self.logger.writer is not None:
