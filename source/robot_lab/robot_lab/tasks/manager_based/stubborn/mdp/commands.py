@@ -163,9 +163,10 @@ class MotionCommand(CommandTerm):
         """
         # ---- 1. 批量计算 gravity Z 分量（roll/pitch 代理） ----
         gravity = torch.tensor([0., 0., -1.], device=self.device)
-        # quat_inv 批量化：对每个帧的四元数取逆
-        pool_grav = quat_apply(quat_inv(self.motion_pool.body_quat_w[:, 0]), gravity)  # [pool_n, 3]
-        main_grav = quat_apply(quat_inv(self.motion.body_quat_w[:, 0]), gravity)        # [main_n, 3]
+        pool_n = self.motion_pool.body_quat_w.shape[0]
+        main_n = self.motion.body_quat_w.shape[0]
+        pool_grav = quat_apply(quat_inv(self.motion_pool.body_quat_w[:, 0]), gravity.repeat(pool_n, 1))
+        main_grav = quat_apply(quat_inv(self.motion.body_quat_w[:, 0]), gravity.repeat(main_n, 1))
         grav_diff = torch.abs(pool_grav[:, None, 2] - main_grav[None, :, 2])  # [pool_n, main_n]
 
         # ---- 2. 批量计算 joint 误差 ----
