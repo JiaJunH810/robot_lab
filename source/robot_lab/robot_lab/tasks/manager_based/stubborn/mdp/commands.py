@@ -32,17 +32,55 @@ if TYPE_CHECKING:
 
 class MotionLoader:
     def __init__(self, motion_file: str, body_indexes: Sequence[int], device: str = "cpu"):
-        assert os.path.isfile(motion_file), f"Invalid file path: {motion_file}"
-        data = np.load(motion_file)
-        self.fps = data["fps"]
-        self.joint_pos = torch.tensor(data["joint_pos"], dtype=torch.float32, device=device)
-        self.joint_vel = torch.tensor(data["joint_vel"], dtype=torch.float32, device=device)
-        self._body_pos_w = torch.tensor(data["body_pos_w"], dtype=torch.float32, device=device)
-        self._body_quat_w = torch.tensor(data["body_quat_w"], dtype=torch.float32, device=device)
-        self._body_lin_vel_w = torch.tensor(data["body_lin_vel_w"], dtype=torch.float32, device=device)
-        self._body_ang_vel_w = torch.tensor(data["body_ang_vel_w"], dtype=torch.float32, device=device)
         self._body_indexes = body_indexes
-        self.time_step_total = self.joint_pos.shape[0]
+
+        if os.path.isdir(motion_file):
+            # 目录模式：加载所有 .npz 并沿时间轴拼接
+            npz_files = sorted([f for f in os.listdir(motion_file) if f.endswith(".npz")])
+            assert len(npz_files) > 0, f"No .npz files found in {motion_file}"
+            fps = None
+            joint_pos_list, joint_vel_list = [], []
+            body_pos_list, body_quat_list = [], []
+            body_lin_vel_list, body_ang_vel_list = [], []
+            self._file_offsets = []  # 每个文件在拼接后的起止帧 [start, end)
+
+            offset = 0
+            for fname in npz_files:
+                full = os.path.join(motion_file, fname)
+                data = np.load(full)
+                n = data["joint_pos"].shape[0]
+                self._file_offsets.append((fname, offset, offset + n))
+                joint_pos_list.append(torch.tensor(data["joint_pos"], dtype=torch.float32, device=device))
+                joint_vel_list.append(torch.tensor(data["joint_vel"], dtype=torch.float32, device=device))
+                body_pos_list.append(torch.tensor(data["body_pos_w"], dtype=torch.float32, device=device))
+                body_quat_list.append(torch.tensor(data["body_quat_w"], dtype=torch.float32, device=device))
+                body_lin_vel_list.append(torch.tensor(data["body_lin_vel_w"], dtype=torch.float32, device=device))
+                body_ang_vel_list.append(torch.tensor(data["body_ang_vel_w"], dtype=torch.float32, device=device))
+                if fps is None:
+                    fps = float(data["fps"])
+                offset += n
+
+            self.fps = fps
+            self.joint_pos = torch.cat(joint_pos_list, dim=0)
+            self.joint_vel = torch.cat(joint_vel_list, dim=0)
+            self._body_pos_w = torch.cat(body_pos_list, dim=0)
+            self._body_quat_w = torch.cat(body_quat_list, dim=0)
+            self._body_lin_vel_w = torch.cat(body_lin_vel_list, dim=0)
+            self._body_ang_vel_w = torch.cat(body_ang_vel_list, dim=0)
+            self.time_step_total = self.joint_pos.shape[0]
+        else:
+            # 单文件模式
+            assert os.path.isfile(motion_file), f"Invalid file path: {motion_file}"
+            self._file_offsets = None
+            data = np.load(motion_file)
+            self.fps = data["fps"]
+            self.joint_pos = torch.tensor(data["joint_pos"], dtype=torch.float32, device=device)
+            self.joint_vel = torch.tensor(data["joint_vel"], dtype=torch.float32, device=device)
+            self._body_pos_w = torch.tensor(data["body_pos_w"], dtype=torch.float32, device=device)
+            self._body_quat_w = torch.tensor(data["body_quat_w"], dtype=torch.float32, device=device)
+            self._body_lin_vel_w = torch.tensor(data["body_lin_vel_w"], dtype=torch.float32, device=device)
+            self._body_ang_vel_w = torch.tensor(data["body_ang_vel_w"], dtype=torch.float32, device=device)
+            self.time_step_total = self.joint_pos.shape[0]
 
     @property
     def body_pos_w(self) -> torch.Tensor:
@@ -74,7 +112,14 @@ class MotionCommand(CommandTerm):
             self.robot.find_bodies(self.cfg.body_names, preserve_order=True)[0], dtype=torch.long, device=self.device
         )
 
-        self.motion = MotionLoader(self.cfg.motion_file, self.body_indexes, device=self.device)
+        # 加载所有运动序列（拼接），用于随机初始化
+        self.motion_pool = MotionLoader(self.cfg.motion_file, self.body_indexes, device=self.device)
+        # 加载主跟踪序列
+        self.motion = MotionLoader(self.cfg.track_file, self.body_indexes, device=self.device)
+
+        # 预计算 motion_pool 每一帧 → 主跟踪序列最近帧的映射
+        self._pool_to_main = self._compute_pool_to_main()
+
         self.time_steps = torch.zeros(self.num_envs, dtype=torch.long, device=self.device)
         self._end_stall = torch.zeros(self.num_envs, dtype=torch.long, device=self.device)
         self.body_pos_relative_w = torch.zeros(self.num_envs, len(cfg.body_names), 3, device=self.device)
@@ -110,6 +155,36 @@ class MotionCommand(CommandTerm):
         self.metrics["sampling_entropy"] = torch.zeros(self.num_envs, device=self.device)
         self.metrics["sampling_top1_prob"] = torch.zeros(self.num_envs, device=self.device)
         self.metrics["sampling_top1_bin"] = torch.zeros(self.num_envs, device=self.device)
+
+    def _compute_pool_to_main(self) -> torch.Tensor:
+        """预计算 motion_pool 每一帧 → 主跟踪序列最近帧的映射（纯张量，不走 for 循环）。
+
+        策略：先按 roll/pitch 粗筛，再按 joint_pos + joint_vel 精排。
+        """
+        # ---- 1. 批量计算 gravity Z 分量（roll/pitch 代理） ----
+        gravity = torch.tensor([0., 0., -1.], device=self.device)
+        # quat_inv 批量化：对每个帧的四元数取逆
+        pool_grav = quat_apply(quat_inv(self.motion_pool.body_quat_w[:, 0]), gravity)  # [pool_n, 3]
+        main_grav = quat_apply(quat_inv(self.motion.body_quat_w[:, 0]), gravity)        # [main_n, 3]
+        grav_diff = torch.abs(pool_grav[:, None, 2] - main_grav[None, :, 2])  # [pool_n, main_n]
+
+        # ---- 2. 批量计算 joint 误差 ----
+        jpos_err = ((self.motion_pool.joint_pos[:, None, :] - self.motion.joint_pos[None, :, :]) ** 2).mean(dim=2)
+        jvel_err = ((self.motion_pool.joint_vel[:, None, :] - self.motion.joint_vel[None, :, :]) ** 2).mean(dim=2)
+        joint_err = jpos_err + 0.1 * jvel_err  # [pool_n, main_n]
+
+        # ---- 3. 粗筛 + 精排 ----
+        GRAV_THRESH = 0.3
+        candidates = grav_diff < GRAV_THRESH
+        no_cand = ~candidates.any(dim=1)  # 没有任何候选的帧
+
+        # 候选帧内取 min joint_err，无候选的取 min grav_diff
+        masked = joint_err.clone()
+        masked[~candidates] = float("inf")
+        best = torch.argmin(masked, dim=1)
+        best[no_cand] = torch.argmin(grav_diff, dim=1)[no_cand]
+
+        return best
 
     @property
     def command(self) -> torch.Tensor:  # TODO Consider again if this is the best observation
@@ -257,38 +332,44 @@ class MotionCommand(CommandTerm):
     def _resample_command(self, env_ids: Sequence[int]):
         if len(env_ids) == 0:
             return
-        self._adaptive_sampling(env_ids)
+        n_env = len(env_ids)
 
-        root_pos = self.body_pos_w[:, 0].clone()
-        root_ori = self.body_quat_w[:, 0].clone()
-        root_lin_vel = self.body_lin_vel_w[:, 0].clone()
-        root_ang_vel = self.body_ang_vel_w[:, 0].clone()
+        # 从 motion_pool 随机抽帧
+        pool_idx = torch.randint(0, self.motion_pool.time_step_total, (n_env,), device=self.device)
 
+        # 初始化机器人到池帧的状态
+        root_pos = self.motion_pool.body_pos_w[pool_idx, 0] + self._env.scene.env_origins[env_ids]
+        root_ori = self.motion_pool.body_quat_w[pool_idx, 0]
+        root_lin_vel = self.motion_pool.body_lin_vel_w[pool_idx, 0]
+        root_ang_vel = self.motion_pool.body_ang_vel_w[pool_idx, 0]
+        joint_pos = self.motion_pool.joint_pos[pool_idx].clone()
+        joint_vel = self.motion_pool.joint_vel[pool_idx].clone()
+
+        # 小扰动（与 BeyondMimic 原版一致）
         range_list = [self.cfg.pose_range.get(key, (0.0, 0.0)) for key in ["x", "y", "z", "roll", "pitch", "yaw"]]
         ranges = torch.tensor(range_list, device=self.device)
-        rand_samples = sample_uniform(ranges[:, 0], ranges[:, 1], (len(env_ids), 6), device=self.device)
-        root_pos[env_ids] += rand_samples[:, 0:3]
+        rand_samples = sample_uniform(ranges[:, 0], ranges[:, 1], (n_env, 6), device=self.device)
+        root_pos += rand_samples[:, 0:3]
         orientations_delta = quat_from_euler_xyz(rand_samples[:, 3], rand_samples[:, 4], rand_samples[:, 5])
-        root_ori[env_ids] = quat_mul(orientations_delta, root_ori[env_ids])
+        root_ori = quat_mul(orientations_delta, root_ori)
         range_list = [self.cfg.velocity_range.get(key, (0.0, 0.0)) for key in ["x", "y", "z", "roll", "pitch", "yaw"]]
         ranges = torch.tensor(range_list, device=self.device)
-        rand_samples = sample_uniform(ranges[:, 0], ranges[:, 1], (len(env_ids), 6), device=self.device)
-        root_lin_vel[env_ids] += rand_samples[:, :3]
-        root_ang_vel[env_ids] += rand_samples[:, 3:]
-
-        joint_pos = self.joint_pos.clone()
-        joint_vel = self.joint_vel.clone()
+        rand_samples = sample_uniform(ranges[:, 0], ranges[:, 1], (n_env, 6), device=self.device)
+        root_lin_vel += rand_samples[:, :3]
+        root_ang_vel += rand_samples[:, 3:]
 
         joint_pos += sample_uniform(*self.cfg.joint_position_range, joint_pos.shape, joint_pos.device)
         soft_joint_pos_limits = self.robot.data.soft_joint_pos_limits[env_ids]
-        joint_pos[env_ids] = torch.clip(
-            joint_pos[env_ids], soft_joint_pos_limits[:, :, 0], soft_joint_pos_limits[:, :, 1]
-        )
-        self.robot.write_joint_state_to_sim(joint_pos[env_ids], joint_vel[env_ids], env_ids=env_ids)
+        joint_pos = torch.clip(joint_pos, soft_joint_pos_limits[:, :, 0], soft_joint_pos_limits[:, :, 1])
+
+        self.robot.write_joint_state_to_sim(joint_pos, joint_vel, env_ids=env_ids)
         self.robot.write_root_state_to_sim(
-            torch.cat([root_pos[env_ids], root_ori[env_ids], root_lin_vel[env_ids], root_ang_vel[env_ids]], dim=-1),
+            torch.cat([root_pos, root_ori, root_lin_vel, root_ang_vel], dim=-1),
             env_ids=env_ids,
         )
+
+        # 用预计算映射找到主序列最近帧，从那里开始跟踪
+        self.time_steps[env_ids] = self._pool_to_main[pool_idx]
 
     def _update_command(self):
         self.time_steps += 1
@@ -389,6 +470,7 @@ class MotionCommandCfg(CommandTermCfg):
     asset_name: str = MISSING
 
     motion_file: str = MISSING
+    track_file: str = MISSING
     anchor_body_name: str = MISSING
     body_names: list[str] = MISSING
 

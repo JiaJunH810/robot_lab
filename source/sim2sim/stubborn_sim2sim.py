@@ -1,0 +1,263 @@
+import time
+import mujoco
+import mujoco.viewer
+import numpy as np
+import torch
+import onnx
+from tqdm import tqdm
+import onnxruntime
+
+@torch.jit.script
+def quat_conjugate(q: torch.Tensor) -> torch.Tensor:
+    shape = q.shape
+    q = q.reshape(-1, 4)
+    return torch.cat((q[..., 0:1], -q[..., 1:]), dim=-1).view(shape)
+
+@torch.jit.script
+def quat_inv(q: torch.Tensor, eps: float = 1e-9) -> torch.Tensor:
+    return quat_conjugate(q) / q.pow(2).sum(dim=-1, keepdim=True).clamp(min=eps)
+
+@torch.jit.script
+def quat_mul(q1: torch.Tensor, q2: torch.Tensor) -> torch.Tensor:
+    if q1.shape != q2.shape:
+        msg = f"Expected input quaternion shape mismatch: {q1.shape} != {q2.shape}."
+        raise ValueError(msg)
+    shape = q1.shape
+    q1 = q1.reshape(-1, 4)
+    q2 = q2.reshape(-1, 4)
+    w1, x1, y1, z1 = q1[:, 0], q1[:, 1], q1[:, 2], q1[:, 3]
+    w2, x2, y2, z2 = q2[:, 0], q2[:, 1], q2[:, 2], q2[:, 3]
+    ww = (z1 + x1) * (x2 + y2)
+    yy = (w1 - y1) * (w2 + z2)
+    zz = (w1 + y1) * (w2 - z2)
+    xx = ww + yy + zz
+    qq = 0.5 * (xx + (z1 - x1) * (x2 - y2))
+    w = qq - ww + (z1 - y1) * (y2 - z2)
+    x = qq - xx + (x1 + w1) * (x2 + w2)
+    y = qq - yy + (w1 - x1) * (y2 + z2)
+    z = qq - zz + (z1 + y1) * (w2 - x2)
+    return torch.stack([w, x, y, z], dim=-1).view(shape)
+
+@torch.jit.script
+def quat_apply(quat: torch.Tensor, vec: torch.Tensor) -> torch.Tensor:
+    shape = vec.shape
+    quat = quat.reshape(-1, 4)
+    vec = vec.reshape(-1, 3)
+    xyz = quat[:, 1:]
+    t = xyz.cross(vec, dim=-1) * 2
+    return (vec + quat[:, 0:1] * t + xyz.cross(t, dim=-1)).view(shape)
+
+@torch.jit.script
+def matrix_from_quat(quaternions: torch.Tensor) -> torch.Tensor:
+    r, i, j, k = torch.unbind(quaternions, -1)
+    two_s = 2.0 / (quaternions * quaternions).sum(-1)
+    o = torch.stack(
+        (
+            1 - two_s * (j * j + k * k),
+            two_s * (i * j - k * r),
+            two_s * (i * k + j * r),
+            two_s * (i * j + k * r),
+            1 - two_s * (i * i + k * k),
+            two_s * (j * k - i * r),
+            two_s * (i * k - j * r),
+            two_s * (j * k + i * r),
+            1 - two_s * (i * i + j * j),
+        ),
+        -1,
+    )
+    return o.reshape(quaternions.shape[:-1] + (3, 3))
+
+@torch.jit.script
+def yaw_quat(q: torch.Tensor) -> torch.Tensor:
+    """Extract the yaw component of a quaternion as a rotation around Z.
+
+    从四元数中提取绕 Z 轴的 yaw 旋转分量。
+    """
+    w, x, y, z = q[..., 0], q[..., 1], q[..., 2], q[..., 3]
+    # Yaw = atan2(2*(w*z + x*y), 1 - 2*(y^2 + z^2))
+    yaw = torch.atan2(2.0 * (w * z + x * y), 1.0 - 2.0 * (y * y + z * z))
+    half_yaw = yaw * 0.5
+    return torch.stack([
+        torch.cos(half_yaw),
+        torch.zeros_like(half_yaw),
+        torch.zeros_like(half_yaw),
+        torch.sin(half_yaw),
+    ], dim=-1)
+
+
+def pd_control(target_q, q, kp, target_dq, dq, kd):
+    """Calculates torques from position commands"""
+    return (target_q - q) * kp + (target_dq - dq) * kd
+
+
+class StubbornSim2Sim:
+    """Sim-to-sim inference for Stubborn policy with yaw-aligned tracking representation."""
+
+    def __init__(self, xml_path, motion_file, policy_path):
+        motion = np.load(motion_file)
+        self.motion_joint_pos = motion["joint_pos"]
+        self.motion_joint_vel = motion["joint_vel"]
+        self.motion_body_pos_w = motion["body_pos_w"]
+        self.motion_body_quat_w = motion["body_quat_w"]
+
+        self.m = mujoco.MjModel.from_xml_path(xml_path)
+        self.m.opt.timestep = 0.001
+        self.d = mujoco.MjData(self.m)
+        mujoco.mj_resetDataKeyframe(self.m, self.d, 0)
+        mujoco.mj_step(self.m, self.d)
+        self.viewer = mujoco.viewer.launch_passive(self.m, self.d)
+        self.viewer.cam.distance = 5.0
+        self.viewer.cam.lookat = [0, 0, 0.7]
+
+        model = onnx.load(policy_path)
+        self.load(model)
+
+        self.policy = onnxruntime.InferenceSession(policy_path)
+
+    def load(self, model):
+        print ("========================== xml parameters ==========================")
+        self.xml_order = []
+        self.xml_body_names = []
+        for i in range(self.m.nu):
+            name = mujoco.mj_id2name(self.m, mujoco.mjtObj.mjOBJ_ACTUATOR, i)
+            self.xml_order.append(name)
+        for i in range(self.m.nbody):
+            name = mujoco.mj_id2name(self.m, mujoco.mjtObj.mjOBJ_BODY, i)
+            if name is None:
+                name = 'world'
+            self.xml_body_names.append(name)
+        self.num_action = len(self.xml_order)
+        print(f"xml_order: {self.xml_order}")
+        print(f"num_action: {self.num_action}")
+        print(f"body_names: {self.xml_body_names}")
+
+        for prop in model.metadata_props:
+            if prop.key == "joint_names":
+                self.lab_order = [x for x in prop.value.split(',')]
+            if prop.key == "default_joint_pos":
+                self.lab_default_joint_pos = np.array([float(x) for x in prop.value.split(',')])
+            if prop.key == "joint_stiffness":
+                self.lab_joint_stiffness = np.array([float(x) for x in prop.value.split(',')])
+            if prop.key == "joint_damping":
+                self.lab_joint_damping = np.array([float(x) for x in prop.value.split(',')])
+            if prop.key == "action_scale":
+                self.lab_action_scale = np.array([float(x) for x in prop.value.split(',')])
+            if prop.key == "body_names":
+                self.lab_body_names = [x for x in prop.value.split(',')]
+        print ("========================== lab parameters ==========================")
+        print(f"lab_order: {self.lab_order}")
+        print(f"default_joint_pos: {', '.join(map(str, self.lab_default_joint_pos))}")
+        print(f"joint_stiffness: {', '.join(map(str, self.lab_joint_stiffness))}")
+        print(f"joint_damping: {', '.join(map(str, self.lab_joint_damping))}")
+        print(f"action_scale: {', '.join(map(str, self.lab_action_scale))}")
+        print(f"body_names: {self.lab_body_names}")
+
+        self.xml_to_lab = [self.xml_order.index(joint) for joint in self.lab_order]
+        self.lab_to_xml = [self.lab_order.index(joint) for joint in self.xml_order]
+
+    def extract_data(self, anchor_name):
+        dof_pos = self.d.qpos.astype(np.float32)[-self.num_action:]
+        dof_vel = self.d.qvel.astype(np.float32)[-self.num_action:]
+        root_pos = self.d.xpos[self.xml_body_names.index(anchor_name)]
+        root_quat = self.d.xquat[self.xml_body_names.index(anchor_name)]
+        ang_vel = self.d.qvel.astype(np.float32)[3:6]
+        return (dof_pos, dof_vel, root_pos, root_quat, ang_vel)
+
+    def calc_motion_anchor_ori_b_yaw(self, robot_anchor_pos, robot_anchor_quat, motion_anchor_pos, motion_anchor_quat):
+        """Yaw-aligned motion anchor orientation observation (matches Stubborn paper).
+
+        Removes robot base yaw from the motion anchor orientation, keeping
+        pitch/roll (gravity direction) intact.  Uses yaw-only transform instead
+        of full subtract_frame_transforms.
+        """
+        # yaw_inv = R_Z(ψ)^T — remove robot base yaw
+        yaw_inv = quat_inv(yaw_quat(robot_anchor_quat.unsqueeze(0))).squeeze(0)
+
+        # Motion anchor orientation in yaw-aligned frame: R̃ = R_Z(ψ)^T * R_W
+        ori = quat_mul(yaw_inv, motion_anchor_quat)
+
+        # 6D rotation representation (first 2 columns of rotation matrix)
+        mat = matrix_from_quat(ori.unsqueeze(0)).squeeze(0)
+        return mat[:, :2].flatten()
+
+    def run(self):
+        sim_duration = 60.0
+        sim_dt = 0.001
+        sim_decimation = 20
+        timestep = 0
+        anchor_name = "base_link"
+        action_buffer = np.zeros((self.num_action, ), dtype=np.float32)
+        print(f"帧数: {self.motion_joint_pos.shape[0]}")
+
+        # 初始化状态
+        self.d.qpos[-self.num_action:] = self.motion_joint_pos[0, self.lab_to_xml]
+        self.d.qvel[-self.num_action:] = self.motion_joint_vel[0, self.lab_to_xml]
+        self.d.qpos[:3] = self.motion_body_pos_w[0, self.lab_body_names.index(anchor_name), :]
+        self.d.qpos[3:7] = self.motion_body_quat_w[0, self.lab_body_names.index(anchor_name), :]
+
+        for i in tqdm(range(int(sim_duration / sim_dt)), desc="Running simulation..."):
+            xml_joint_pos, xml_joint_vel, root_pos, root_quat, ang_vel = self.extract_data(anchor_name)
+
+            if i % sim_decimation == 0:
+                # Tracking command: motion joint pos + vel (same as generated_commands)
+                command = np.concatenate(
+                    (self.motion_joint_pos[timestep, :], self.motion_joint_vel[timestep, :]), axis=-1
+                )
+
+                # Yaw-aligned motion anchor orientation (Stubborn-specific)
+                motion_anchor_ori_b = self.calc_motion_anchor_ori_b_yaw(
+                    torch.tensor(root_pos), torch.tensor(root_quat),
+                    torch.tensor(self.motion_body_pos_w[timestep, self.lab_body_names.index(anchor_name), :]),
+                    torch.tensor(self.motion_body_quat_w[timestep, self.lab_body_names.index(anchor_name), :])
+                ).numpy()
+
+                # Proprioception (same as original)
+                base_ang_vel = ang_vel
+                joint_pos = xml_joint_pos[self.xml_to_lab] - self.lab_default_joint_pos
+                joint_vel = xml_joint_vel[self.xml_to_lab]
+                last_actions = action_buffer
+
+                # Policy observation — must match stubborn PolicyCfg order:
+                # command, motion_anchor_ori_b, base_ang_vel, joint_pos, joint_vel, actions
+                obs = np.concatenate([
+                    command,
+                    motion_anchor_ori_b,
+                    base_ang_vel,
+                    joint_pos,
+                    joint_vel,
+                    last_actions
+                ]).astype(np.float32).reshape(1, -1)
+
+                lab_actions = self.policy.run(['actions'], {'obs': obs})[0].squeeze()
+                action_buffer = lab_actions.copy()
+                scale_actions = lab_actions * self.lab_action_scale
+
+                pd_target = scale_actions[self.lab_to_xml] + self.lab_default_joint_pos[self.lab_to_xml]
+
+                self.viewer.cam.lookat = self.d.qpos.astype(np.float32)[:3]
+                self.viewer.sync()
+                timestep = (timestep + 1) % self.motion_joint_pos.shape[0]
+                # timestep = timestep + 1
+                # timestep = min(timestep, self.motion_joint_pos.shape[0] - 1)
+                print(timestep, self.motion_joint_pos.shape[0] - 1)
+
+            torque = pd_control(pd_target, xml_joint_pos, self.lab_joint_stiffness[self.lab_to_xml],
+                               np.zeros_like(self.lab_joint_damping), xml_joint_vel,
+                               self.lab_joint_damping[self.lab_to_xml])
+            self.d.ctrl = torque
+
+            mujoco.mj_step(self.m, self.d)
+            time.sleep(self.m.opt.timestep)
+
+        self.viewer.close()
+
+
+# ================= 主程序 =================
+if __name__ == "__main__":
+    # 路径配置
+    xml_path = "/home/cyborg/Desktop/projects/robot_lab/source/sim2sim/assets/ENX/biped_ENX_1_1.xml"
+    motion_file = "/home/cyborg/Desktop/projects/robot_lab/source/robot_lab/robot_lab/tasks/manager_based/stubborn/config/cyborg/motion/fallAndGetUp1_subject1_2070_to_2210_collect.npz"
+    policy_path = "/home/cyborg/Desktop/projects/robot_lab/logs/rsl_rl/cyborg_stubborn/2026-06-23_01-43-39/exported/policy.onnx"
+
+    r = StubbornSim2Sim(xml_path, motion_file, policy_path)
+    r.run()

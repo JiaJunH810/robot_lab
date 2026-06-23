@@ -16,7 +16,8 @@ class CyborgStubbornFlatEnvCfg(CyborgEnvCfg):
 
         self.scene.robot = CYBORG_BIPED_CFG.replace(prim_path="{ENV_REGEX_NS}/Robot")
         self.actions.joint_pos.scale = CYBORG_BIPED_ACTION_SCALE
-        self.commands.motion.motion_file = f"{os.path.dirname(__file__)}/motion/getup_left.npz"
+        self.commands.motion.motion_file = f"{os.path.dirname(__file__)}/motion/"
+        self.commands.motion.track_file = f"{os.path.dirname(__file__)}/motion/fallAndGetUp1_subject1_2070_to_2210_collect.npz"
         self.commands.motion.anchor_body_name = "base_link"
         self.commands.motion.body_names = [
             "base_link",
