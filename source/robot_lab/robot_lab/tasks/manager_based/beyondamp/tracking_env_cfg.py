@@ -251,18 +251,6 @@ class RewardsCfg:
         },
     )
 
-    track_head_height = RewTerm(
-        func=mdp.track_head_height,
-        weight=0.0,
-        params={
-            "std": 1.0,
-            "head_offset": (-0.01, 0.0, 0.6907),
-            "asset_cfg": SceneEntityCfg("robot"),
-            "mask_delay": True,
-            "delay_env_rew_ratio": 4,
-        },
-    )
-
     # Tracking
     track_anchor_linear_velocity = RewTerm(
         func=mdp.track_anchor_linear_velocity,
@@ -296,6 +284,18 @@ class RewardsCfg:
             "mask_delay": True,
             "delay_env_rew_ratio": 0.0,
             "body_cfg": SceneEntityCfg("robot", body_names=["base_link"]),
+        },
+    )
+
+    # Upright
+    upright_orientation = RewTerm(
+        func=mdp.upright_orientation,
+        weight=0.5,
+        params={
+            "std": 0.5,
+            "asset_cfg": SceneEntityCfg("robot"),
+            "mask_delay": True,
+            "delay_env_rew_ratio": 3.5,
         },
     )
 

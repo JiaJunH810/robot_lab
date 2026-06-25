@@ -47,56 +47,6 @@ def track_root_height(env: ManagerBasedRLEnv, std: float, asset_cfg: SceneEntity
     return reward
 
 
-def track_head_height(
-    env: ManagerBasedRLEnv,
-    std: float,
-    head_offset: tuple[float, float, float],
-    mask_delay: bool = False,
-    delay_env_rew_ratio: float = 1.0,
-    asset_cfg: SceneEntityCfg = SceneEntityCfg("robot"),
-) -> torch.Tensor:
-    """Reward for maintaining head at its default height above the root.
-
-    Head world position is computed by applying the root's orientation to a
-    fixed local offset (head position in root frame), then adding root
-    position. The reward penalises deviation of the resulting head Z from
-    the default root Z plus the offset's z-component.
-
-    When mask_delay=True, only delay envs currently in the buffer period
-    receive the reward (amplified by delay_env_rew_ratio). Normal envs and
-    delay envs that have already recovered get zero.
-
-    Args:
-        env: The reinforcement learning environment.
-        std: Standard deviation for the Gaussian reward kernel.
-        head_offset: (x, y, z) offset of head from root in root local frame.
-        mask_delay: Whether to zero out reward for non-delay environments.
-        delay_env_rew_ratio: Reward multiplier for delay environments in buffer.
-        asset_cfg: Scene entity configuration for the robot asset.
-    """
-    asset = env.scene[asset_cfg.name]
-    root_pos = asset.data.root_pos_w
-    root_quat = asset.data.root_quat_w
-
-    # Head world position = root_pos + rotate(root_quat, head_offset_local)
-    head_offset_local = torch.tensor(head_offset, device=env.device, dtype=root_pos.dtype)
-    head_offset_local = head_offset_local.expand(root_pos.shape[0], -1)
-    head_pos_w = root_pos + math_utils.quat_apply(root_quat, head_offset_local)
-
-    desired_head_z = asset.data.default_root_state[:, 2] + head_offset[2]
-    cur_head_z = head_pos_w[:, 2]
-    height_error = torch.square(desired_head_z - cur_head_z)
-    reward = torch.exp(-height_error / std**2)
-
-    if mask_delay:
-        from robot_lab.tasks.manager_based.beyondamp.mdp.terminations import DelayedTerminationManager
-        tm = env.termination_manager
-        if isinstance(tm, DelayedTerminationManager):
-            in_buffer = tm._delay_env_mask & (tm._delay_counters > 0)
-            reward = torch.where(in_buffer, reward * delay_env_rew_ratio, torch.zeros_like(reward))
-
-    return reward
-
 
 # ---- Delay env helpers ----
 
@@ -251,4 +201,25 @@ def feet_slide(
     )
     reward = torch.sum(foot_lateral_vel * contacts, dim=1)
     reward *= torch.clamp(-env.scene["robot"].data.projected_gravity_b[:, 2], 0, 0.7) / 0.7
+    return reward
+
+
+def upright_orientation(env: ManagerBasedRLEnv, std: float, asset_cfg: SceneEntityCfg,
+                        mask_delay: bool = False, delay_env_rew_ratio: float = 1.0) -> torch.Tensor:
+    """Reward for keeping the robot upright via projected gravity.
+
+    When mask_delay=True, only delay envs in buffer get the reward.
+    Normal walking envs get 0 — slight tilt is natural during locomotion.
+    """
+    asset = env.scene[asset_cfg.name]
+    tilt = 1.0 + asset.data.projected_gravity_b[:, 2]
+    reward = torch.exp(-tilt / std**2)
+
+    if mask_delay:
+        from robot_lab.tasks.manager_based.beyondamp.mdp.terminations import DelayedTerminationManager
+        tm = env.termination_manager
+        if isinstance(tm, DelayedTerminationManager):
+            in_buffer = tm._delay_env_mask & (tm._delay_counters > 0)
+            reward = torch.where(in_buffer, reward * delay_env_rew_ratio, torch.zeros_like(reward))
+
     return reward

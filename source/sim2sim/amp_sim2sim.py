@@ -1,7 +1,8 @@
 import time
 import os
 import struct
-import mujoco, mujoco_viewer
+import mujoco
+import mujoco.viewer
 import numpy as np
 import torch
 import onnx
@@ -94,8 +95,9 @@ class RobotLabAMPSim2Sim:
         self.d = mujoco.MjData(self.m)
         mujoco.mj_resetDataKeyframe(self.m, self.d, 0)
         mujoco.mj_step(self.m, self.d)
-        self.viewer = mujoco_viewer.MujocoViewer(self.m, self.d)
+        self.viewer = mujoco.viewer.launch_passive(self.m, self.d)
         self.viewer.cam.distance = 5.0
+        self.viewer.cam.lookat = [0, 0, 0.7]
 
         model = onnx.load(policy_path)
         self.load(model)
@@ -140,8 +142,22 @@ class RobotLabAMPSim2Sim:
         print(f"action_scale: {', '.join(map(str, self.lab_action_scale))}")
         print(f"body_names: {self.lab_body_names}")
 
-        self.xml_to_lab = [self.xml_order.index(joint) for joint in self.lab_order]
-        self.lab_to_xml = [self.lab_order.index(joint) for joint in self.xml_order]
+        # G1 XML 执行器名无 _joint 后缀，lab_order 有 _joint 后缀，做兼容匹配
+        _xml_set = set(self.xml_order)
+        def _find_xml(lab_name):
+            if lab_name in _xml_set: return lab_name
+            s = lab_name.replace("_joint", "")
+            if s in _xml_set: return s
+            raise ValueError(f"Cannot match '{lab_name}' in XML order")
+        _lab_set = set(self.lab_order)
+        def _find_lab(xml_name):
+            if xml_name in _lab_set: return xml_name
+            s = xml_name + "_joint"
+            if s in _lab_set: return s
+            raise ValueError(f"Cannot match '{xml_name}' in lab order")
+
+        self.xml_to_lab = [self.xml_order.index(_find_xml(lab)) for lab in self.lab_order]
+        self.lab_to_xml = [self.lab_order.index(_find_lab(xml)) for xml in self.xml_order]
 
     def extract_data(self, anchor_name):
         dof_pos = self.d.qpos.astype(np.float32)[-self.num_action:]
@@ -258,18 +274,14 @@ class RobotLabAMPSim2Sim:
         self._js_axis_vx = 1   # left stick Y → forward velocity
         self._js_axis_vy = 0   # left stick X → lateral velocity
         self._js_axis_wz = 2   # right stick X → yaw rate
-        self._glfw_window = None
-        self._cmd_scale = [1.0, 0.5, 1.0]  # vx_max, vy_max, wz_max
-
-        if hasattr(self.viewer, "window") and self.viewer.window is not None:
-            self._glfw_window = self.viewer.window
-            print("[Keyboard] GLFW ready (W/S/A/D/Q/E/Space/Esc)")
+        self._glfw_window = None  # launch_passive 无 .window，键盘控速暂不可用
+        self._cmd_scale = [5.0, 2.5, 5.0]  # vx_max, vy_max, wz_max
 
         # ---- sim params ----
         sim_duration = 120.0
         sim_dt = 0.001
         sim_decimation = 20
-        anchor_name = "base_link"
+        anchor_name = "torso_link"
         history_length = 4
         action_buffer = np.zeros((self.num_action, ), dtype=np.float32)
 
@@ -338,11 +350,12 @@ class RobotLabAMPSim2Sim:
                 pd_target = scale_actions[self.lab_to_xml] + self.lab_default_joint_pos[self.lab_to_xml]
 
                 self.viewer.cam.lookat = self.d.qpos.astype(np.float32)[:3]
-                self.viewer.render()
+                self.viewer.sync()
 
             torque = pd_control(pd_target, xml_joint_pos, self.lab_joint_stiffness[self.lab_to_xml], np.zeros_like(self.lab_joint_damping), xml_joint_vel, self.lab_joint_damping[self.lab_to_xml])
             self.d.ctrl = torque
             mujoco.mj_step(self.m, self.d)
+            time.sleep(self.m.opt.timestep)
 
         if self._js_fd is not None:
             os.close(self._js_fd)
@@ -350,8 +363,8 @@ class RobotLabAMPSim2Sim:
 
 # ================= 主程序 =================
 if __name__ == "__main__":
-    xml_path = "/home/cyborg/Desktop/projects/robot_lab/source/sim2sim/assets/biped_temp_1_0.xml"
-    policy_path = "/home/cyborg/Desktop/projects/robot_lab/logs/rsl_rl/cyborg_beyondamp/2026-06-11_20-59-51/exported/policy.onnx"
+    xml_path = "/home/cyborg/Desktop/projects/robot_lab/source/sim2sim/assets/g1/g1_29dof_rev_1_0.xml"
+    policy_path = "/home/cyborg/Desktop/projects/robot_lab/logs/rsl_rl/g1_beyondamp/2026-06-22_11-38-14/exported/policy.onnx"
 
     r = RobotLabAMPSim2Sim(xml_path, policy_path)
     r.run()
