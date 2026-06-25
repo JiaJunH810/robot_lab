@@ -333,44 +333,61 @@ class MotionCommand(CommandTerm):
     def _resample_command(self, env_ids: Sequence[int]):
         if len(env_ids) == 0:
             return
+        env_ids = torch.as_tensor(env_ids, device=self.device)
         n_env = len(env_ids)
 
-        # 从 motion_pool 随机抽帧
-        pool_idx = torch.randint(0, self.motion_pool.time_step_total, (n_env,), device=self.device)
+        # 20% 从池随机初始化（扩展训练区），80% 走 adaptive sampling（弱项强化）
+        pool_mask = torch.rand(n_env, device=self.device) < 0.2
 
-        # 初始化机器人到池帧的状态
-        root_pos = self.motion_pool.body_pos_w[pool_idx, 0] + self._env.scene.env_origins[env_ids]
-        root_ori = self.motion_pool.body_quat_w[pool_idx, 0]
-        root_lin_vel = self.motion_pool.body_lin_vel_w[pool_idx, 0]
-        root_ang_vel = self.motion_pool.body_ang_vel_w[pool_idx, 0]
-        joint_pos = self.motion_pool.joint_pos[pool_idx].clone()
-        joint_vel = self.motion_pool.joint_vel[pool_idx].clone()
+        # ---- 池初始化 ----
+        pool_ids = env_ids[pool_mask]
+        if len(pool_ids) > 0:
+            pool_idx = torch.randint(0, self.motion_pool.time_step_total, (len(pool_ids),), device=self.device)
+            root_pos = self.motion_pool.body_pos_w[pool_idx, 0] + self._env.scene.env_origins[pool_ids]
+            root_ori = self.motion_pool.body_quat_w[pool_idx, 0]
+            root_lin_vel = self.motion_pool.body_lin_vel_w[pool_idx, 0]
+            root_ang_vel = self.motion_pool.body_ang_vel_w[pool_idx, 0]
+            joint_pos = self.motion_pool.joint_pos[pool_idx].clone()
+            joint_vel = self.motion_pool.joint_vel[pool_idx].clone()
+            self._apply_perturb_and_init(pool_ids, root_pos, root_ori, root_lin_vel, root_ang_vel, joint_pos, joint_vel)
+            self.time_steps[pool_ids] = self._pool_to_main[pool_idx]
 
-        # 小扰动（与 BeyondMimic 原版一致）
+        # ---- adaptive sampling（主序列内） ----
+        norm_ids = env_ids[~pool_mask]
+        if len(norm_ids) > 0:
+            self._adaptive_sampling(norm_ids)
+            root_pos = self.body_pos_w[:, 0].clone()
+            root_ori = self.body_quat_w[:, 0].clone()
+            root_lin_vel = self.body_lin_vel_w[:, 0].clone()
+            root_ang_vel = self.body_ang_vel_w[:, 0].clone()
+            joint_pos = self.joint_pos.clone()
+            joint_vel = self.joint_vel.clone()
+            self._apply_perturb_and_init(norm_ids, root_pos, root_ori, root_lin_vel, root_ang_vel, joint_pos, joint_vel)
+
+    def _apply_perturb_and_init(self, env_ids, root_pos, root_ori, root_lin_vel, root_ang_vel, joint_pos, joint_vel):
+        """施加小扰动并写入 sim（与 BeyondMimic 原版一致）。"""
+        n = len(env_ids)
         range_list = [self.cfg.pose_range.get(key, (0.0, 0.0)) for key in ["x", "y", "z", "roll", "pitch", "yaw"]]
         ranges = torch.tensor(range_list, device=self.device)
-        rand_samples = sample_uniform(ranges[:, 0], ranges[:, 1], (n_env, 6), device=self.device)
-        root_pos += rand_samples[:, 0:3]
+        rand_samples = sample_uniform(ranges[:, 0], ranges[:, 1], (n, 6), device=self.device)
+        root_pos[env_ids] += rand_samples[:, 0:3]
         orientations_delta = quat_from_euler_xyz(rand_samples[:, 3], rand_samples[:, 4], rand_samples[:, 5])
-        root_ori = quat_mul(orientations_delta, root_ori)
+        root_ori[env_ids] = quat_mul(orientations_delta, root_ori[env_ids])
         range_list = [self.cfg.velocity_range.get(key, (0.0, 0.0)) for key in ["x", "y", "z", "roll", "pitch", "yaw"]]
         ranges = torch.tensor(range_list, device=self.device)
-        rand_samples = sample_uniform(ranges[:, 0], ranges[:, 1], (n_env, 6), device=self.device)
-        root_lin_vel += rand_samples[:, :3]
-        root_ang_vel += rand_samples[:, 3:]
+        rand_samples = sample_uniform(ranges[:, 0], ranges[:, 1], (n, 6), device=self.device)
+        root_lin_vel[env_ids] += rand_samples[:, :3]
+        root_ang_vel[env_ids] += rand_samples[:, 3:]
 
-        joint_pos += sample_uniform(*self.cfg.joint_position_range, joint_pos.shape, joint_pos.device)
-        soft_joint_pos_limits = self.robot.data.soft_joint_pos_limits[env_ids]
-        joint_pos = torch.clip(joint_pos, soft_joint_pos_limits[:, :, 0], soft_joint_pos_limits[:, :, 1])
+        joint_pos[env_ids] += sample_uniform(*self.cfg.joint_position_range, joint_pos[env_ids].shape, joint_pos.device)
+        limits = self.robot.data.soft_joint_pos_limits[env_ids]
+        joint_pos[env_ids] = torch.clip(joint_pos[env_ids], limits[:, :, 0], limits[:, :, 1])
 
-        self.robot.write_joint_state_to_sim(joint_pos, joint_vel, env_ids=env_ids)
+        self.robot.write_joint_state_to_sim(joint_pos[env_ids], joint_vel[env_ids], env_ids=env_ids)
         self.robot.write_root_state_to_sim(
-            torch.cat([root_pos, root_ori, root_lin_vel, root_ang_vel], dim=-1),
+            torch.cat([root_pos[env_ids], root_ori[env_ids], root_lin_vel[env_ids], root_ang_vel[env_ids]], dim=-1),
             env_ids=env_ids,
         )
-
-        # 用预计算映射找到主序列最近帧，从那里开始跟踪
-        self.time_steps[env_ids] = self._pool_to_main[pool_idx]
 
     def _update_command(self):
         self.time_steps += 1
