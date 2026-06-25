@@ -343,12 +343,19 @@ class MotionCommand(CommandTerm):
         pool_ids = env_ids[pool_mask]
         if len(pool_ids) > 0:
             pool_idx = torch.randint(0, self.motion_pool.time_step_total, (len(pool_ids),), device=self.device)
-            root_pos = self.motion_pool.body_pos_w[pool_idx, 0] + self._env.scene.env_origins[pool_ids]
-            root_ori = self.motion_pool.body_quat_w[pool_idx, 0]
-            root_lin_vel = self.motion_pool.body_lin_vel_w[pool_idx, 0]
-            root_ang_vel = self.motion_pool.body_ang_vel_w[pool_idx, 0]
-            joint_pos = self.motion_pool.joint_pos[pool_idx].clone()
-            joint_vel = self.motion_pool.joint_vel[pool_idx].clone()
+            # 全量 tensor，只改 pool_ids 行
+            root_pos = self.body_pos_w[:, 0].clone()
+            root_ori = self.body_quat_w[:, 0].clone()
+            root_lin_vel = self.body_lin_vel_w[:, 0].clone()
+            root_ang_vel = self.body_ang_vel_w[:, 0].clone()
+            joint_pos = self.joint_pos.clone()
+            joint_vel = self.joint_vel.clone()
+            root_pos[pool_ids] = self.motion_pool.body_pos_w[pool_idx, 0] + self._env.scene.env_origins[pool_ids]
+            root_ori[pool_ids] = self.motion_pool.body_quat_w[pool_idx, 0]
+            root_lin_vel[pool_ids] = self.motion_pool.body_lin_vel_w[pool_idx, 0]
+            root_ang_vel[pool_ids] = self.motion_pool.body_ang_vel_w[pool_idx, 0]
+            joint_pos[pool_ids] = self.motion_pool.joint_pos[pool_idx]
+            joint_vel[pool_ids] = self.motion_pool.joint_vel[pool_idx]
             self._apply_perturb_and_init(pool_ids, root_pos, root_ori, root_lin_vel, root_ang_vel, joint_pos, joint_vel)
             self.time_steps[pool_ids] = self._pool_to_main[pool_idx]
 
