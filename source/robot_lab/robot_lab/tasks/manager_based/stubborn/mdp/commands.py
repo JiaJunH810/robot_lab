@@ -76,7 +76,6 @@ class MotionCommand(CommandTerm):
 
         self.motion = MotionLoader(self.cfg.motion_file, self.body_indexes, device=self.device)
         self.time_steps = torch.zeros(self.num_envs, dtype=torch.long, device=self.device)
-        self._end_stall = torch.zeros(self.num_envs, dtype=torch.long, device=self.device)
         self.body_pos_relative_w = torch.zeros(self.num_envs, len(cfg.body_names), 3, device=self.device)
         self.body_quat_relative_w = torch.zeros(self.num_envs, len(cfg.body_names), 4, device=self.device)
         self.body_quat_relative_w[:, :, 0] = 1.0
@@ -292,15 +291,7 @@ class MotionCommand(CommandTerm):
 
     def _update_command(self):
         self.time_steps += 1
-
-        # 到达运动末尾时：先卡在最后一帧 N 步，再重新采样
-        at_end = self.time_steps >= self.motion.time_step_total
-        self._end_stall = torch.where(at_end, self._end_stall + 1, torch.zeros_like(self._end_stall))
-        self.time_steps = torch.where(at_end, self.motion.time_step_total - 1, self.time_steps)
-
-        # stall 步数走完后才触发重新采样（每个 env 随机 50~200 步 = 1~4 秒）
-        stall_thresh = torch.randint(50, 201, (self.num_envs,), device=self.device)
-        env_ids = torch.where(self._end_stall >= stall_thresh)[0]
+        env_ids = torch.where(self.time_steps >= self.motion.time_step_total)[0]
         self._resample_command(env_ids)
 
         # Yaw-aligned frame: remove robot base yaw from all body tracking

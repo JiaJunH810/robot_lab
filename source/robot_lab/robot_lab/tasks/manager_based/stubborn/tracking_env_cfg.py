@@ -39,6 +39,32 @@ VELOCITY_RANGE = {
     "yaw": (-0.78, 0.78),
 }
 
+VELOCITY_RANGE_HARD = {
+    "x": (-1.0, 1.0),
+    "y": (-1.0, 1.0),
+    "z": (-0.4, 0.4),
+    "roll": (-1.04, 1.04),
+    "pitch": (-1.04, 1.04),
+    "yaw": (-1.56, 1.56),
+}
+
+POSE_RANGE = {
+    "x": (-0.05, 0.05),
+    "y": (-0.05, 0.05),
+    "z": (-0.01, 0.01),
+    "roll": (-0.1, 0.1),
+    "pitch": (-0.1, 0.1),
+    "yaw": (-0.2, 0.2),
+}
+
+POSE_RANGE_HARD = {
+    "x": (-0.1, 0.1),
+    "y": (-0.1, 0.1),
+    "z": (-0.1, 0.1),
+    "roll": (-0.3, 0.3),
+    "pitch": (-0.3, 0.3),
+    "yaw": (-0.2, 0.2),
+}
 
 @configclass
 class MySceneCfg(InteractiveSceneCfg):
@@ -89,15 +115,8 @@ class CommandsCfg:
         asset_name="robot",
         resampling_time_range=(1.0e9, 1.0e9),
         debug_vis=True,
-        pose_range={
-            "x": (-0.05, 0.05),
-            "y": (-0.05, 0.05),
-            "z": (-0.01, 0.01),
-            "roll": (-0.1, 0.1),
-            "pitch": (-0.1, 0.1),
-            "yaw": (-0.2, 0.2),
-        },
-        velocity_range=VELOCITY_RANGE,
+        pose_range=POSE_RANGE_HARD,
+        velocity_range=VELOCITY_RANGE_HARD,
         joint_position_range=(-0.1, 0.1),
     )
 
