@@ -247,7 +247,7 @@ class RewardsCfg:
             "std": 0.3,
             "asset_cfg": SceneEntityCfg("robot"),
             "mask_delay": True,
-            "delay_env_rew_ratio": 3.5,
+            "delay_env_rew_ratio": 1.0,
         },
     )
 
@@ -284,18 +284,6 @@ class RewardsCfg:
             "mask_delay": True,
             "delay_env_rew_ratio": 0.0,
             "body_cfg": SceneEntityCfg("robot", body_names=["base_link"]),
-        },
-    )
-
-    # Upright
-    upright_orientation = RewTerm(
-        func=mdp.upright_orientation,
-        weight=0.5,
-        params={
-            "std": 0.5,
-            "asset_cfg": SceneEntityCfg("robot"),
-            "mask_delay": True,
-            "delay_env_rew_ratio": 3.5,
         },
     )
 
@@ -338,7 +326,7 @@ class TerminationsCfg:
     )
     bad_base_height = DoneTerm(
         func=mdp.root_height_below_minimum,
-        params={"minimum_height": 0.70, "asset_cfg": SceneEntityCfg("robot")},
+        params={"minimum_height": 0.50, "asset_cfg": SceneEntityCfg("robot")},
     )
 
 

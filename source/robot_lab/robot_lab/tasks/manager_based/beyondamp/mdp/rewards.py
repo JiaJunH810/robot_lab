@@ -204,22 +204,5 @@ def feet_slide(
     return reward
 
 
-def upright_orientation(env: ManagerBasedRLEnv, std: float, asset_cfg: SceneEntityCfg,
-                        mask_delay: bool = False, delay_env_rew_ratio: float = 1.0) -> torch.Tensor:
-    """Reward for keeping the robot upright via projected gravity.
 
-    When mask_delay=True, only delay envs in buffer get the reward.
-    Normal walking envs get 0 — slight tilt is natural during locomotion.
-    """
-    asset = env.scene[asset_cfg.name]
-    tilt = 1.0 + asset.data.projected_gravity_b[:, 2]
-    reward = torch.exp(-tilt / std**2)
 
-    if mask_delay:
-        from robot_lab.tasks.manager_based.beyondamp.mdp.terminations import DelayedTerminationManager
-        tm = env.termination_manager
-        if isinstance(tm, DelayedTerminationManager):
-            in_buffer = tm._delay_env_mask & (tm._delay_counters > 0)
-            reward = torch.where(in_buffer, reward * delay_env_rew_ratio, torch.zeros_like(reward))
-
-    return reward

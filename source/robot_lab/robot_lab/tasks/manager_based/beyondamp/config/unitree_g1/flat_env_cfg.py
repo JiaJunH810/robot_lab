@@ -59,4 +59,14 @@ class G1BeyondAMPFlatEnvCfg(CyborgEnvCfg):
         # G1 track_anchor velocity/anchor config (torso_link as anchor, matches AMP_mjlab)
         self.rewards.track_anchor_linear_velocity.params["anchor_cfg"].body_names = ["torso_link"]
         self.rewards.track_anchor_angular_velocity.params["anchor_cfg"].body_names = ["torso_link"]
-        self.rewards.body_ang_vel_xy_l2.params["body_cfg"].body_names = ["torso_link"]
+        self.rewards.body_ang_vel_xy_l2.params["body_cfg"].body_names = ["pelvis"]
+
+        # G1 push velocity: match AMP_mjlab ranges
+        self.events.randomize_push_robot.params["velocity_range"] = {
+            "x": (-1.0, 1.0),
+            "y": (-0.5, 0.5),
+            "z": (-0.4, 0.4),
+            "roll": (-0.52, 0.52),
+            "pitch": (-0.52, 0.52),
+            "yaw": (-0.78, 0.78),
+        }
