@@ -152,7 +152,7 @@ class AMPOnPolicyRunner:
             )
 
             # Save model every 1000 iterations (starting after iteration 20000)
-            if self.logger.writer is not None and it >= 20000 and it % 1000 == 0:
+            if self.logger.writer is not None and it >= 45000 and it % 1000 == 0:
                 self.save(os.path.join(self.logger.log_dir, f"model_{it}.pt"))
 
             # Save best-episode checkpoint (overwrites on new best)
