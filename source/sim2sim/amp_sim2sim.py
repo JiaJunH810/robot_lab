@@ -275,7 +275,7 @@ class RobotLabAMPSim2Sim:
         self._js_axis_vy = 0   # left stick X → lateral velocity
         self._js_axis_wz = 2   # right stick X → yaw rate
         self._glfw_window = None  # launch_passive 无 .window，键盘控速暂不可用
-        self._cmd_scale = [5.0, 2.5, 5.0]  # vx_max, vy_max, wz_max
+        self._cmd_scale = [1.0, 1.5, 0.0]  # vx_max, vy_max, wz_max
 
         # ---- sim params ----
         sim_duration = 120.0
@@ -316,6 +316,8 @@ class RobotLabAMPSim2Sim:
                     break
 
                 vel_cmd = self.read_joystick_command()
+                vel_cmd[0] = -2.
+                vel_cmd[1] = 0.
                 print(vel_cmd)
                 # projected gravity: world [0,0,-1] rotated to body frame
                 gravity_w = torch.tensor([0.0, 0.0, -1.0], dtype=torch.float32)
@@ -364,7 +366,7 @@ class RobotLabAMPSim2Sim:
 # ================= 主程序 =================
 if __name__ == "__main__":
     xml_path = "/home/cyborg/Desktop/projects/robot_lab/source/sim2sim/assets/g1/g1_29dof_rev_1_0.xml"
-    policy_path = "/home/cyborg/Desktop/projects/robot_lab/logs/rsl_rl/g1_beyondamp/2026-06-22_11-38-14/exported/policy.onnx"
+    policy_path = "/home/cyborg/Desktop/projects/robot_lab/logs/rsl_rl/g1_beyondamp/2026-06-29_13-55-22/exported/policy.onnx"
 
     r = RobotLabAMPSim2Sim(xml_path, policy_path)
     r.run()

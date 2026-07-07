@@ -257,7 +257,7 @@ if __name__ == "__main__":
     # 路径配置
     xml_path = "/home/cyborg/Desktop/projects/robot_lab/source/sim2sim/assets/ENX/biped_ENX_1_1.xml"
     motion_file = "/home/cyborg/Desktop/projects/robot_lab/source/robot_lab/robot_lab/tasks/manager_based/stubborn/config/cyborg/motion/fallAndGetUp1_subject1_2070_to_2210_collect.npz"
-    policy_path = "/home/cyborg/Desktop/projects/robot_lab/logs/rsl_rl/cyborg_stubborn/2026-06-23_01-43-39/exported/policy.onnx"
+    policy_path = "/home/cyborg/Desktop/projects/robot_lab/logs/rsl_rl/cyborg_stubborn/2026-06-26_12-00-51/exported/policy.onnx"
 
     r = StubbornSim2Sim(xml_path, motion_file, policy_path)
     r.run()
