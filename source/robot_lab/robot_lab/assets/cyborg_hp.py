@@ -68,10 +68,10 @@ CYBORG_HALF_PED_CFG = ArticulationCfg(
             # 上半身（passive, 仅初始姿态）
             "J_arm_l_02": -1.4,
             "J_arm_l_04": -2.09,
-            "J_arm_l_06": 1.0,
+            "J_arm_l_06": 0.9,
             "J_arm_r_02": 1.4,
             "J_arm_r_04": 2.09,
-            "J_arm_r_06": -1.0,
+            "J_arm_r_06": -0.9,
         },
         joint_vel={".*": 0.0},
     ),
