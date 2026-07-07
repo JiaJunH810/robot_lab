@@ -9,7 +9,7 @@ from isaaclab_rl.rsl_rl import RslRlOnPolicyRunnerCfg, RslRlPpoActorCriticCfg, R
 @configclass
 class CyborgHPRoughPPORunnerCfg(RslRlOnPolicyRunnerCfg):
     num_steps_per_env = 24
-    max_iterations = 3000
+    max_iterations = 30000
     save_interval = 50
     experiment_name = "cyborg_hp_rough"
     policy = RslRlPpoActorCriticCfg(
@@ -41,5 +41,5 @@ class CyborgHPFlatPPORunnerCfg(CyborgHPRoughPPORunnerCfg):
     def __post_init__(self):
         super().__post_init__()
 
-        self.max_iterations = 1500
+        self.max_iterations = 30000
         self.experiment_name = "cyborg_hp_flat"
