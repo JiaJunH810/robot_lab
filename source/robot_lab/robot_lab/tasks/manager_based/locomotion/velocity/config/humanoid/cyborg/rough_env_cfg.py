@@ -117,7 +117,8 @@ class CyborgHPRoughEnvCfg(LocomotionVelocityRoughEnvCfg):
             self.disable_zero_weight_rewards()
 
         # ------------------------------Terminations------------------------------
-        self.terminations.illegal_contact.params["sensor_cfg"].body_names = [self.base_link_name]
+        self.terminations.illegal_contact = None
+        self.terminations.bad_base_height = 0.65
 
         # ------------------------------Curriculums------------------------------
         self.curriculum.command_levels_lin_vel = None

@@ -663,6 +663,15 @@ class TerminationsCfg:
         params={"sensor_cfg": SceneEntityCfg("contact_forces", body_names=""), "threshold": 1.0},
     )
 
+    bad_orientation = DoneTerm(
+        func=mdp.bad_orientation,
+        params={"limit_angle": 1.2217, "asset_cfg": SceneEntityCfg("robot")},
+    )
+    bad_base_height = DoneTerm(
+        func=mdp.root_height_below_minimum,
+        params={"minimum_height": 0.65, "asset_cfg": SceneEntityCfg("robot")},
+    )
+
 
 @configclass
 class CurriculumCfg:
