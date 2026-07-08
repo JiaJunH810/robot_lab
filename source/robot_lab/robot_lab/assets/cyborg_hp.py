@@ -33,7 +33,7 @@ CYBORG_HALF_PED_CFG = ArticulationCfg(
     spawn=sim_utils.UrdfFileCfg(
         fix_base=False,
         replace_cylinders_with_capsules=True,
-        asset_path=f"{ISAACLAB_ASSETS_DATA_DIR}/Robots/cyborg/biped_temp_1_0/urdf/biped_temp_1_0.urdf",
+        asset_path=f"{ISAACLAB_ASSETS_DATA_DIR}/Robots/cyborg/biped_temp_1_0/urdf/biped_temp_1_0_fixed.urdf",
         activate_contact_sensors=True,
         rigid_props=sim_utils.RigidBodyPropertiesCfg(
             disable_gravity=False,
@@ -54,7 +54,6 @@ CYBORG_HALF_PED_CFG = ArticulationCfg(
     init_state=ArticulationCfg.InitialStateCfg(
         pos=(0.0, 0.0, 0.94),
         joint_pos={
-            # 下半身（actuated, 12 DoF）
             "J_hip_.*_roll": 0.0,
             "J_hip_.*_yaw": 0.0,
             "J_hip_l_pitch": 0.4,
@@ -65,13 +64,6 @@ CYBORG_HALF_PED_CFG = ArticulationCfg(
             "J_knee_r_pitch": -0.7,
             "J_ankle_r_pitch": -0.3,
             "J_ankle_r_roll": 0.0,
-            # 上半身（passive, 仅初始姿态）
-            "J_arm_l_02": -1.4,
-            "J_arm_l_04": -2.09,
-            "J_arm_l_06": 0.9,
-            "J_arm_r_02": 1.4,
-            "J_arm_r_04": 2.09,
-            "J_arm_r_06": -0.9,
         },
         joint_vel={".*": 0.0},
     ),
