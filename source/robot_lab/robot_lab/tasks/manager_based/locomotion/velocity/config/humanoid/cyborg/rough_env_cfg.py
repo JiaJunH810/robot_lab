@@ -27,11 +27,14 @@ class CyborgHPRoughEnvCfg(LocomotionVelocityRoughEnvCfg):
         self.scene.height_scanner_base.prim_path = "{ENV_REGEX_NS}/Robot/" + self.base_link_name
 
         # ------------------------------Observations------------------------------
+        self.observations.policy.history_length = 15
+        self.observations.critic.history_length = 15
         self.observations.policy.base_ang_vel.scale = 0.25
         self.observations.policy.joint_pos.scale = 1.0
         self.observations.policy.joint_vel.scale = 0.05
         self.observations.policy.base_lin_vel = None
         self.observations.policy.height_scan = None
+        self.observations.critic.height_scan = None
 
         # ------------------------------Actions------------------------------
         self.actions.joint_pos.scale = CYBORG_HALF_PED_ACTION_SCALE
