@@ -97,7 +97,7 @@ class Runner(OnPolicyRunner):
             
             if len(self.logger.lenbuffer) > 0:
                 mean_len = statistics.mean(self.logger.lenbuffer)
-                if mean_len > greater_episode:
+                if mean_len >= greater_episode:
                     greater_episode = mean_len
                     self.save(os.path.join(self.logger.log_dir, f"greater_episode.pt"))
 
