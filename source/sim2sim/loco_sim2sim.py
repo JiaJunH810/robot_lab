@@ -1,9 +1,13 @@
 """Locomotion policy sim2sim: velocity-command biped walking in MuJoCo.
 
 Matches Isaac Lab RobotLab-Isaac-Velocity-Flat-Cyborg-HP-v0 exactly.
+Supports joystick (e.g. GameSir) for manual velocity control.
+If no joystick detected, falls back to uniform random commands.
 """
 
 import math
+import os
+import struct
 import numpy as np
 import onnx
 import onnxruntime
@@ -31,8 +35,10 @@ def projected_gravity(quat_wxyz):
 
 
 class LocoSim2Sim:
-    def __init__(self, xml_path, policy_path, history_length=15):
+    def __init__(self, xml_path, policy_path, history_length=15,
+                 cmd_max=(0.5, 0.5, 0.5)):
         self.history_length = history_length
+        self.cmd_max = cmd_max  # (vx_max, vy_max, wz_max)
 
         self.m = mujoco.MjModel.from_xml_path(xml_path)
         self.m.opt.timestep = 0.001
@@ -61,6 +67,16 @@ class LocoSim2Sim:
         self.cmd_resample_timer = 0
         self.cmd_resample_interval = int(10.0 / 0.02)
 
+        # ---- Joystick ----
+        self._js_fd = self._open_js_device()
+        self._js_axes = {}
+        self._js_buttons = set()
+        self._js_mapped = False
+        # GameSir default axis mapping (adjust if needed)
+        self._js_axis_vx = 1   # left stick Y
+        self._js_axis_vy = 0   # left stick X
+        self._js_axis_wz = 3   # right stick X (try 2 or 4 if no response)
+
     @staticmethod
     def _push_history(buf, new_val):
         buf[:-1] = buf[1:]
@@ -88,6 +104,60 @@ class LocoSim2Sim:
         self.xml_to_lab = [self.xml_order.index(j) for j in self.lab_order]
         self.lab_to_xml = [self.lab_order.index(j) for j in self.xml_order]
 
+    # =========================================================================
+    # Joystick
+    # =========================================================================
+    def _open_js_device(self):
+        for dev in ["/dev/input/js0", "/dev/input/js1", "/dev/input/js2"]:
+            try:
+                fd = os.open(dev, os.O_RDONLY | os.O_NONBLOCK)
+                print(f"[Joystick] Opened {dev}")
+                return fd
+            except OSError:
+                continue
+        print("[Joystick] Not found, using uniform random commands")
+        return None
+
+    def _read_js_state(self):
+        if self._js_fd is None:
+            return {}, set()
+        while True:
+            try:
+                data = os.read(self._js_fd, 8)
+                if len(data) < 8:
+                    break
+                _, value, etype, num = struct.unpack('<IhBB', data)
+                if etype == 0x02:
+                    self._js_axes[num] = value / 32767.0
+                elif etype == 0x01:
+                    if value:
+                        self._js_buttons.add(num)
+                    else:
+                        self._js_buttons.discard(num)
+            except BlockingIOError:
+                break
+            except OSError:
+                break
+        return self._js_axes, self._js_buttons
+
+    def _get_joystick_cmd(self):
+        axes, buttons = self._read_js_state()
+        if buttons and not self._js_mapped:
+            print(f"[Joystick] axes: {dict(sorted(axes.items()))}  buttons: {buttons}")
+            self._js_mapped = True
+
+        def dead(val, dz=0.1):
+            return 0.0 if abs(val) < dz else val
+
+        vx = -dead(axes.get(self._js_axis_vx, 0.0)) * self.cmd_max[0]
+        vy = -dead(axes.get(self._js_axis_vy, 0.0)) * self.cmd_max[1]
+        wz = -dead(axes.get(self._js_axis_wz, 0.0)) * self.cmd_max[2]
+        # A button = emergency stop
+        if 0 in buttons:
+            vx = vy = wz = 0.0
+        return np.array([vx, vy, wz], dtype=np.float32)
+
+    # =========================================================================
     def run(self, sim_duration=120.0):
         sim_dt = 0.001
         sim_decimation = 20
@@ -113,16 +183,21 @@ class LocoSim2Sim:
         for i in tqdm(range(total_steps), desc="Running..."):
             if i % sim_decimation == 0:
                 self.ctrl_step += 1
-                self.cmd_resample_timer += 1
-                if self.cmd_resample_timer >= self.cmd_resample_interval:
-                    self.vel_cmd = np.array([
-                        np.random.uniform(-0.0, 0.0),
-                        np.random.uniform(-0.0, 0.0),
-                        np.random.uniform(-1.0, 1.0),
-                    ], dtype=np.float32)
-                    if np.linalg.norm(self.vel_cmd[:2]) < 0.2:
-                        self.vel_cmd[:2] = 0.0
-                    self.cmd_resample_timer = 0
+
+                # ---- Velocity command: joystick or uniform random ----
+                if self._js_fd is not None:
+                    self.vel_cmd = self._get_joystick_cmd()
+                else:
+                    self.cmd_resample_timer += 1
+                    if self.cmd_resample_timer >= self.cmd_resample_interval:
+                        self.vel_cmd = np.array([
+                            np.random.uniform(-self.cmd_max[0], self.cmd_max[0]),
+                            np.random.uniform(-self.cmd_max[1], self.cmd_max[1]),
+                            np.random.uniform(-self.cmd_max[2], self.cmd_max[2]),
+                        ], dtype=np.float32)
+                        if np.linalg.norm(self.vel_cmd[:2]) < 0.2:
+                            self.vel_cmd[:2] = 0.0
+                        self.cmd_resample_timer = 0
 
                 xml_joint_pos = self.d.qpos.astype(np.float32)[-self.num_action:]
                 xml_joint_vel = self.d.qvel.astype(np.float32)[-self.num_action:]
@@ -193,12 +268,15 @@ class LocoSim2Sim:
             self.d.ctrl = torque
             mujoco.mj_step(self.m, self.d)
 
+        if self._js_fd is not None:
+            os.close(self._js_fd)
         self.viewer.close()
 
 
 if __name__ == "__main__":
     xml_path = "/home/cyborg/Desktop/projects/robot_lab/source/sim2sim/assets/temp/biped_temp_1_0_fixed.xml"
-    policy_path = "/home/cyborg/Desktop/projects/robot_lab/logs/rsl_rl/cyborg_hp_flat/2026-07-08_11-48-30/exported/policy.onnx"
+    policy_path = "/home/cyborg/Desktop/projects/robot_lab/logs/rsl_rl/cyborg_hp_flat/2026-07-08_16-35-48/exported/policy.onnx"
 
-    sim = LocoSim2Sim(xml_path, policy_path, history_length=15)
+    sim = LocoSim2Sim(xml_path, policy_path, history_length=15,
+                      cmd_max=(1., 1., 1.))
     sim.run(sim_duration=120.0)
