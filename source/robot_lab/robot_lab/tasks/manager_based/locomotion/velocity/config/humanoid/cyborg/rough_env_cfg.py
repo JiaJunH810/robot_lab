@@ -126,10 +126,13 @@ class CyborgHPRoughEnvCfg(LocomotionVelocityRoughEnvCfg):
         self.terminations.bad_base_height.params["minimum_height"] = 0.65
 
         # ------------------------------Curriculums------------------------------
-        self.curriculum.command_levels_lin_vel = None
-        self.curriculum.command_levels_ang_vel = None
+        # Enabled: start at 10% velocity range, scale up to 100% as tracking improves
 
         # ------------------------------Commands------------------------------
+        self.commands.base_velocity.resampling_time_range = (5.0, 10.0)
         self.commands.base_velocity.ranges.lin_vel_x = (-1.0, 1.0)
         self.commands.base_velocity.ranges.lin_vel_y = (-1.0, 1.0)
         self.commands.base_velocity.ranges.ang_vel_z = (-1.0, 1.0)
+
+        # ------------------------------Episode------------------------------
+        self.episode_length_s = 30.0
