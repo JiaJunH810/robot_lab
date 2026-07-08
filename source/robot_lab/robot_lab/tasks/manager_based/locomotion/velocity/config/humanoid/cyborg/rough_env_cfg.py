@@ -118,7 +118,7 @@ class CyborgHPRoughEnvCfg(LocomotionVelocityRoughEnvCfg):
 
         # ------------------------------Terminations------------------------------
         self.terminations.illegal_contact = None
-        self.terminations.bad_base_height = 0.65
+        self.terminations.bad_base_height.params["minimum_height"] = 0.65
 
         # ------------------------------Curriculums------------------------------
         self.curriculum.command_levels_lin_vel = None
