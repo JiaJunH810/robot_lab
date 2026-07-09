@@ -274,8 +274,8 @@ class LocoSim2Sim:
 
 if __name__ == "__main__":
     xml_path = "/home/cyborg/Desktop/projects/robot_lab/source/sim2sim/assets/temp/biped_temp_1_0_fixed.xml"
-    policy_path = "/home/cyborg/Desktop/projects/robot_lab/logs/rsl_rl/cyborg_hp_flat/2026-07-08_16-35-48/exported/policy.onnx"
+    policy_path = "/home/cyborg/Desktop/projects/robot_lab/logs/rsl_rl/cyborg_hp_flat/2026-07-09_16-22-59/exported/policy.onnx"
 
     sim = LocoSim2Sim(xml_path, policy_path, history_length=15,
-                      cmd_max=(1., 1., 1.))
+                      cmd_max=(0., 0., 0.))
     sim.run(sim_duration=120.0)
