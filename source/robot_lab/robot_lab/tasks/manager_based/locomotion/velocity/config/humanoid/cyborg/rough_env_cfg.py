@@ -73,7 +73,7 @@ class CyborgHPRoughEnvCfg(LocomotionVelocityRoughEnvCfg):
         self.rewards.joint_pos_limits.weight = -0.5
         self.rewards.joint_vel_limits.weight = 0
         self.rewards.joint_power.weight = 0
-        self.rewards.stand_still.weight = 1.0
+        self.rewards.stand_still.weight = -1.0
         self.rewards.joint_pos_penalty.weight = -1.0
         self.rewards.joint_mirror.weight = 0
         self.rewards.joint_mirror.params["mirror_joints"] = [["J_.*_l_.*", "J_.*_r_.*"]]
@@ -134,9 +134,9 @@ class CyborgHPRoughEnvCfg(LocomotionVelocityRoughEnvCfg):
         self.commands.base_velocity.resampling_time_range = (10.0, 10.0)
         self.commands.base_velocity.rel_standing_envs = 0.02
         self.commands.base_velocity.heading_command = False
-        self.commands.base_velocity.ranges.lin_vel_x = (-1.0, 1.0)
-        self.commands.base_velocity.ranges.lin_vel_y = (-1.0, 1.0)
-        self.commands.base_velocity.ranges.ang_vel_z = (-1.0, 1.0)
+        self.commands.base_velocity.ranges.lin_vel_x = (-0.0, 0.0)
+        self.commands.base_velocity.ranges.lin_vel_y = (-0.0, 0.0)
+        self.commands.base_velocity.ranges.ang_vel_z = (-0.0, 0.0)
 
         # ------------------------------Episode------------------------------
         self.episode_length_s = 30.0
