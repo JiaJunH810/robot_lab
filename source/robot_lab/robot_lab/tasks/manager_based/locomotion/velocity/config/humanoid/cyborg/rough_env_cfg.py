@@ -73,14 +73,14 @@ class CyborgHPRoughEnvCfg(LocomotionVelocityRoughEnvCfg):
         self.rewards.joint_pos_limits.weight = -0.5
         self.rewards.joint_vel_limits.weight = 0
         self.rewards.joint_power.weight = 0
-        self.rewards.stand_still.weight = 1.0
+        self.rewards.stand_still.weight = 2.0
         self.rewards.joint_pos_penalty.weight = -1.0
-        self.rewards.joint_mirror.weight = 0
+        self.rewards.joint_mirror.weight = -0.1
         self.rewards.joint_mirror.params["mirror_joints"] = [["J_.*_l_.*", "J_.*_r_.*"]]
 
         # Action penalties
         self.rewards.action_rate_l2.weight = -0.005
-        self.rewards.action_mirror.weight = 0
+        self.rewards.action_mirror.weight = -0.05
         self.rewards.action_mirror.params["mirror_joints"] = [["J_.*_l_.*", "J_.*_r_.*"]]
 
         # Contact sensor
@@ -109,13 +109,13 @@ class CyborgHPRoughEnvCfg(LocomotionVelocityRoughEnvCfg):
         self.rewards.feet_slide.weight = -0.2
         self.rewards.feet_slide.params["sensor_cfg"].body_names = [self.foot_link_name]
         self.rewards.feet_slide.params["asset_cfg"].body_names = [self.foot_link_name]
-        self.rewards.feet_height.weight = 0
+        self.rewards.feet_height.weight = 0.5
         self.rewards.feet_height.params["target_height"] = 0.05
         self.rewards.feet_height.params["asset_cfg"].body_names = [self.foot_link_name]
         self.rewards.feet_height_body.weight = 0
         self.rewards.feet_height_body.params["target_height"] = -0.2
         self.rewards.feet_height_body.params["asset_cfg"].body_names = [self.foot_link_name]
-        self.rewards.upward.weight = 1.0
+        self.rewards.upward.weight = 0.1
 
         # If the weight of rewards is 0, set rewards to None
         if self.__class__.__name__ == "CyborgHPRoughEnvCfg":

@@ -15,8 +15,8 @@ def attach_onnx_metadata(env: ManagerBasedRLEnv, path: str, filename="policy.onn
     onnx_path = os.path.join(path, filename)
     metadata = {
         "joint_names": env.scene["robot"].data.joint_names,
-        "joint_stiffness": env.scene["robot"].data.joint_stiffness[0].cpu().tolist(),
-        "joint_damping": env.scene["robot"].data.joint_damping[0].cpu().tolist(),
+        "joint_stiffness": env.scene["robot"].data.default_joint_stiffness[0].cpu().tolist(),
+        "joint_damping": env.scene["robot"].data.default_joint_damping[0].cpu().tolist(),
         "default_joint_pos": env.scene["robot"].data.default_joint_pos[0].cpu().tolist(),
         "command_names": env.command_manager.active_terms,
         "observation_names": env.observation_manager.active_terms["policy"],

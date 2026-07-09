@@ -203,9 +203,8 @@ class LocoSim2Sim:
                 xml_joint_vel = self.d.qvel.astype(np.float32)[-self.num_action:]
                 root_quat = self.d.qpos.astype(np.float32)[3:7].copy()
 
-                ang_vel_world = self.d.qvel.astype(np.float32)[3:6]
-                R_wb = quat_to_rot_matrix(root_quat)
-                base_ang_vel_body = (R_wb.T @ ang_vel_world).astype(np.float32)
+                # MuJoCo qvel[3:6] is already body-frame angular velocity
+                base_ang_vel_body = self.d.qvel.astype(np.float32)[3:6]
 
                 proj_grav = projected_gravity(root_quat)
                 joint_pos_rel = xml_joint_pos[self.xml_to_lab] - self.lab_default_joint_pos
