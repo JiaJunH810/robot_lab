@@ -129,7 +129,7 @@ class CyborgHPRoughEnvCfg(LocomotionVelocityRoughEnvCfg):
         # Enabled: start at 10% velocity range, scale up to 100% as tracking improves
 
         # ------------------------------Commands------------------------------
-        self.commands.base_velocity.resampling_time_range = (5.0, 10.0)
+        self.commands.base_velocity.resampling_time_range = (10.0, 10.0)
         self.commands.base_velocity.heading_command = False
         self.commands.base_velocity.ranges.lin_vel_x = (-1.0, 1.0)
         self.commands.base_velocity.ranges.lin_vel_y = (-1.0, 1.0)
