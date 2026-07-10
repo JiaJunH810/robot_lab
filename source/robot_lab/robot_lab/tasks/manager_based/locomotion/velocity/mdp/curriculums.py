@@ -39,15 +39,47 @@ def command_levels_lin_vel(
         base_velocity_ranges.lin_vel_x = env._initial_vel_x.tolist()
         base_velocity_ranges.lin_vel_y = env._initial_vel_y.tolist()
 
-    # avoid updating command curriculum at each step since the maximum command is common to all envs
-    if env.common_step_counter % env.max_episode_length == 0:
-        episode_sums = env.reward_manager._episode_sums[reward_term_name]
+        # Buffer to accumulate completed episode rewards across evaluation windows
+        env._curriculum_lin_vel_buffer = []
+
+    # ----- DEBUG -----
+    n_ids = len(env_ids) if isinstance(env_ids, torch.Tensor) else 0
+    step = env.common_step_counter
+    mod = step % env.max_episode_length
+    hit = (mod == 0)
+    # Print every call within +/- 3 steps of eval boundaries, plus periodic heartbeat
+    near_boundary = (mod <= 3 or mod >= env.max_episode_length - 3)
+    if hit or near_boundary:
+        marker = "*** EVAL ***" if hit else "~near"
+        print(f"[CURRICULUM lin_vel TRACE] step={step} mod={mod} n_envs={n_ids} "
+              f"buf={len(env._curriculum_lin_vel_buffer)} {marker}")
+    elif step % 500 == 0:
+        print(f"[CURRICULUM lin_vel STAT] step={step} buf={len(env._curriculum_lin_vel_buffer)} "
+              f"range={base_velocity_ranges.lin_vel_x}")
+    # ----- END DEBUG -----
+
+    # Collect completed episode rewards whenever envs reset (regardless of global step alignment)
+    episode_sums = env.reward_manager._episode_sums[reward_term_name]
+    if isinstance(env_ids, torch.Tensor) and len(env_ids) > 0:
+        for env_id in env_ids:
+            env._curriculum_lin_vel_buffer.append(
+                episode_sums[env_id].item() / env.max_episode_length_s
+            )
+
+    # Evaluate at regular intervals, using accumulated rewards from all completed episodes
+    if hit:
         reward_term_cfg = env.reward_manager.get_term_cfg(reward_term_name)
         delta_command = torch.tensor([-0.1, 0.1], device=env.device)
 
-        mean_reward = torch.mean(episode_sums[env_ids]) / env.max_episode_length_s
+        if len(env._curriculum_lin_vel_buffer) > 0:
+            mean_reward = sum(env._curriculum_lin_vel_buffer) / len(env._curriculum_lin_vel_buffer)
+        else:
+            # Fallback: use env_ids directly (handles step=0 case where buffer is empty
+            # but all envs are resetting simultaneously)
+            mean_reward = torch.mean(episode_sums[env_ids]).item() / env.max_episode_length_s
+
         threshold = 0.8 * reward_term_cfg.weight
-        n_envs = len(env_ids) if isinstance(env_ids, torch.Tensor) else "all"
+        n_envs = len(env._curriculum_lin_vel_buffer)
 
         # If the tracking reward is above 80% of the maximum, increase the range of commands
         if mean_reward > threshold:
@@ -61,13 +93,16 @@ def command_levels_lin_vel(
             # Update ranges
             base_velocity_ranges.lin_vel_x = new_vel_x.tolist()
             base_velocity_ranges.lin_vel_y = new_vel_y.tolist()
-            print(f"[CURRICULUM lin_vel] step={env.common_step_counter} UPGRADE: "
-                  f"mean_reward={mean_reward.item():.4f} threshold={threshold:.4f} "
+            print(f"[CURRICULUM lin_vel] step={step} UPGRADE: "
+                  f"mean_reward={mean_reward:.4f} threshold={threshold:.4f} "
                   f"n_envs={n_envs} new_range={base_velocity_ranges.lin_vel_x}")
         else:
-            print(f"[CURRICULUM lin_vel] step={env.common_step_counter} NO UPGRADE: "
-                  f"mean_reward={mean_reward.item():.4f} threshold={threshold:.4f} "
+            print(f"[CURRICULUM lin_vel] step={step} NO UPGRADE: "
+                  f"mean_reward={mean_reward:.4f} threshold={threshold:.4f} "
                   f"n_envs={n_envs} range={base_velocity_ranges.lin_vel_x}")
+
+        # Clear buffer for next evaluation window
+        env._curriculum_lin_vel_buffer = []
 
     return torch.tensor(base_velocity_ranges.lin_vel_x[1], device=env.device)
 
@@ -89,15 +124,46 @@ def command_levels_ang_vel(
         # Initialize command ranges to initial values
         base_velocity_ranges.ang_vel_z = env._initial_ang_vel_z.tolist()
 
-    # avoid updating command curriculum at each step since the maximum command is common to all envs
-    if env.common_step_counter % env.max_episode_length == 0:
-        episode_sums = env.reward_manager._episode_sums[reward_term_name]
+        # Buffer to accumulate completed episode rewards across evaluation windows
+        env._curriculum_ang_vel_buffer = []
+
+    # ----- DEBUG -----
+    n_ids = len(env_ids) if isinstance(env_ids, torch.Tensor) else 0
+    step = env.common_step_counter
+    mod = step % env.max_episode_length
+    hit = (mod == 0)
+    # Print every call within +/- 3 steps of eval boundaries, plus periodic heartbeat
+    near_boundary = (mod <= 3 or mod >= env.max_episode_length - 3)
+    if hit or near_boundary:
+        marker = "*** EVAL ***" if hit else "~near"
+        print(f"[CURRICULUM ang_vel TRACE] step={step} mod={mod} n_envs={n_ids} "
+              f"buf={len(env._curriculum_ang_vel_buffer)} {marker}")
+    elif step % 500 == 0:
+        print(f"[CURRICULUM ang_vel STAT] step={step} buf={len(env._curriculum_ang_vel_buffer)} "
+              f"range={base_velocity_ranges.ang_vel_z}")
+    # ----- END DEBUG -----
+
+    # Collect completed episode rewards whenever envs reset (regardless of global step alignment)
+    episode_sums = env.reward_manager._episode_sums[reward_term_name]
+    if isinstance(env_ids, torch.Tensor) and len(env_ids) > 0:
+        for env_id in env_ids:
+            env._curriculum_ang_vel_buffer.append(
+                episode_sums[env_id].item() / env.max_episode_length_s
+            )
+
+    # Evaluate at regular intervals, using accumulated rewards from all completed episodes
+    if hit:
         reward_term_cfg = env.reward_manager.get_term_cfg(reward_term_name)
         delta_command = torch.tensor([-0.1, 0.1], device=env.device)
 
-        mean_reward = torch.mean(episode_sums[env_ids]) / env.max_episode_length_s
+        if len(env._curriculum_ang_vel_buffer) > 0:
+            mean_reward = sum(env._curriculum_ang_vel_buffer) / len(env._curriculum_ang_vel_buffer)
+        else:
+            # Fallback: use env_ids directly (handles step=0 case)
+            mean_reward = torch.mean(episode_sums[env_ids]).item() / env.max_episode_length_s
+
         threshold = 0.8 * reward_term_cfg.weight
-        n_envs = len(env_ids) if isinstance(env_ids, torch.Tensor) else "all"
+        n_envs = len(env._curriculum_ang_vel_buffer)
 
         # If the tracking reward is above 80% of the maximum, increase the range of commands
         if mean_reward > threshold:
@@ -108,12 +174,15 @@ def command_levels_ang_vel(
 
             # Update ranges
             base_velocity_ranges.ang_vel_z = new_ang_vel_z.tolist()
-            print(f"[CURRICULUM ang_vel] step={env.common_step_counter} UPGRADE: "
-                  f"mean_reward={mean_reward.item():.4f} threshold={threshold:.4f} "
+            print(f"[CURRICULUM ang_vel] step={step} UPGRADE: "
+                  f"mean_reward={mean_reward:.4f} threshold={threshold:.4f} "
                   f"n_envs={n_envs} new_range={base_velocity_ranges.ang_vel_z}")
         else:
-            print(f"[CURRICULUM ang_vel] step={env.common_step_counter} NO UPGRADE: "
-                  f"mean_reward={mean_reward.item():.4f} threshold={threshold:.4f} "
+            print(f"[CURRICULUM ang_vel] step={step} NO UPGRADE: "
+                  f"mean_reward={mean_reward:.4f} threshold={threshold:.4f} "
                   f"n_envs={n_envs} range={base_velocity_ranges.ang_vel_z}")
+
+        # Clear buffer for next evaluation window
+        env._curriculum_ang_vel_buffer = []
 
     return torch.tensor(base_velocity_ranges.ang_vel_z[1], device=env.device)
