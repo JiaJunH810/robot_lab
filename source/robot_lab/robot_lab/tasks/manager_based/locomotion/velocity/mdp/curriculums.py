@@ -45,8 +45,12 @@ def command_levels_lin_vel(
         reward_term_cfg = env.reward_manager.get_term_cfg(reward_term_name)
         delta_command = torch.tensor([-0.1, 0.1], device=env.device)
 
+        mean_reward = torch.mean(episode_sums[env_ids]) / env.max_episode_length_s
+        threshold = 0.8 * reward_term_cfg.weight
+        n_envs = len(env_ids) if isinstance(env_ids, torch.Tensor) else "all"
+
         # If the tracking reward is above 80% of the maximum, increase the range of commands
-        if torch.mean(episode_sums[env_ids]) / env.max_episode_length_s > 0.8 * reward_term_cfg.weight:
+        if mean_reward > threshold:
             new_vel_x = torch.tensor(base_velocity_ranges.lin_vel_x, device=env.device) + delta_command
             new_vel_y = torch.tensor(base_velocity_ranges.lin_vel_y, device=env.device) + delta_command
 
@@ -57,6 +61,13 @@ def command_levels_lin_vel(
             # Update ranges
             base_velocity_ranges.lin_vel_x = new_vel_x.tolist()
             base_velocity_ranges.lin_vel_y = new_vel_y.tolist()
+            print(f"[CURRICULUM lin_vel] step={env.common_step_counter} UPGRADE: "
+                  f"mean_reward={mean_reward.item():.4f} threshold={threshold:.4f} "
+                  f"n_envs={n_envs} new_range={base_velocity_ranges.lin_vel_x}")
+        else:
+            print(f"[CURRICULUM lin_vel] step={env.common_step_counter} NO UPGRADE: "
+                  f"mean_reward={mean_reward.item():.4f} threshold={threshold:.4f} "
+                  f"n_envs={n_envs} range={base_velocity_ranges.lin_vel_x}")
 
     return torch.tensor(base_velocity_ranges.lin_vel_x[1], device=env.device)
 
@@ -84,8 +95,12 @@ def command_levels_ang_vel(
         reward_term_cfg = env.reward_manager.get_term_cfg(reward_term_name)
         delta_command = torch.tensor([-0.1, 0.1], device=env.device)
 
+        mean_reward = torch.mean(episode_sums[env_ids]) / env.max_episode_length_s
+        threshold = 0.8 * reward_term_cfg.weight
+        n_envs = len(env_ids) if isinstance(env_ids, torch.Tensor) else "all"
+
         # If the tracking reward is above 80% of the maximum, increase the range of commands
-        if torch.mean(episode_sums[env_ids]) / env.max_episode_length_s > 0.8 * reward_term_cfg.weight:
+        if mean_reward > threshold:
             new_ang_vel_z = torch.tensor(base_velocity_ranges.ang_vel_z, device=env.device) + delta_command
 
             # Clamp to ensure we don't exceed final ranges
@@ -93,5 +108,12 @@ def command_levels_ang_vel(
 
             # Update ranges
             base_velocity_ranges.ang_vel_z = new_ang_vel_z.tolist()
+            print(f"[CURRICULUM ang_vel] step={env.common_step_counter} UPGRADE: "
+                  f"mean_reward={mean_reward.item():.4f} threshold={threshold:.4f} "
+                  f"n_envs={n_envs} new_range={base_velocity_ranges.ang_vel_z}")
+        else:
+            print(f"[CURRICULUM ang_vel] step={env.common_step_counter} NO UPGRADE: "
+                  f"mean_reward={mean_reward.item():.4f} threshold={threshold:.4f} "
+                  f"n_envs={n_envs} range={base_velocity_ranges.ang_vel_z}")
 
     return torch.tensor(base_velocity_ranges.ang_vel_z[1], device=env.device)
