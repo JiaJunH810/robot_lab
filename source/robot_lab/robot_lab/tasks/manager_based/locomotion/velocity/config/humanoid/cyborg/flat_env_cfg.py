@@ -19,6 +19,9 @@ class CyborgHPFlatEnvCfg(CyborgHPRoughEnvCfg):
         self.scene.terrain.terrain_generator = None
         # no terrain curriculum
         self.curriculum.terrain_levels = None
+        # no command curriculum
+        self.curriculum.command_levels_lin_vel = None
+        self.curriculum.command_levels_ang_vel = None
 
         # Rewards
         self.rewards.track_ang_vel_z_exp.weight = 2.0
