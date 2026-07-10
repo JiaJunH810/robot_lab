@@ -442,6 +442,16 @@ class RewardsCfg:
         },
     )
 
+    stand_still_vel = RewTerm(
+        func=mdp.stand_still_vel,
+        weight=0.0,
+        params={
+            "command_name": "base_velocity",
+            "command_threshold": 0.1,
+            "asset_cfg": SceneEntityCfg("robot", joint_names=".*"),
+        },
+    )
+
     joint_pos_penalty = RewTerm(
         func=mdp.joint_pos_penalty,
         weight=0.0,
