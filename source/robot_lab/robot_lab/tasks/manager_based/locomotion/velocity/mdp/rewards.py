@@ -104,6 +104,19 @@ def stand_still(
     return reward
 
 
+def stand_still_vel(
+    env: ManagerBasedRLEnv,
+    command_name: str,
+    command_threshold: float = 0.06,
+    asset_cfg: SceneEntityCfg = SceneEntityCfg("robot"),
+) -> torch.Tensor:
+    """Penalize joint velocities when the command is near zero, letting the robot find its natural equilibrium."""
+    reward = torch.sum(torch.square(env.scene[asset_cfg.name].data.joint_vel[:, asset_cfg.joint_ids]), dim=1)
+    reward *= torch.norm(env.command_manager.get_command(command_name), dim=1) < command_threshold
+    reward *= torch.clamp(-env.scene["robot"].data.projected_gravity_b[:, 2], 0, 0.7) / 0.7
+    return reward
+
+
 def joint_pos_penalty(
     env: ManagerBasedRLEnv,
     command_name: str,

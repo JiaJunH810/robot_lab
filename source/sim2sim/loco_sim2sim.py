@@ -46,6 +46,10 @@ class LocoSim2Sim:
         mujoco.mj_resetDataKeyframe(self.m, self.d, 0)
         mujoco.mj_step(self.m, self.d)
 
+        # 脚踝连杆 body ID，用于打印高度
+        self.ankle_l_id = mujoco.mj_name2id(self.m, mujoco.mjtObj.mjOBJ_BODY, "ankle_l_roll_link")
+        self.ankle_r_id = mujoco.mj_name2id(self.m, mujoco.mjtObj.mjOBJ_BODY, "ankle_r_roll_link")
+
         self.viewer = mujoco_viewer.MujocoViewer(self.m, self.d)
         self.viewer.cam.distance = 3.0
         self.viewer.cam.azimuth = 90.0
@@ -63,7 +67,7 @@ class LocoSim2Sim:
         self.hist_act  = np.zeros((history_length, self.num_action), dtype=np.float32)
 
         self.action_buffer = np.zeros(self.num_action, dtype=np.float32)
-        self.vel_cmd = np.array([0.3, 0.0, 0.0], dtype=np.float32)
+        self.vel_cmd = np.array([0.0, 0.0, 0.0], dtype=np.float32)
         self.cmd_resample_timer = 0
         self.cmd_resample_interval = int(10.0 / 0.02)
 
@@ -88,6 +92,8 @@ class LocoSim2Sim:
             self.xml_order.append(
                 mujoco.mj_id2name(self.m, mujoco.mjtObj.mjOBJ_ACTUATOR, i))
         self.num_action = len(self.xml_order)
+        print(" -------------------- xml order -------------------- ")
+        print(self.xml_order)
 
         for prop in model.metadata_props:
             if prop.key == "joint_names":
@@ -100,6 +106,12 @@ class LocoSim2Sim:
                 self.lab_joint_damping = np.array([float(x) for x in prop.value.split(",")])
             elif prop.key == "action_scale":
                 self.lab_action_scale = np.array([float(x) for x in prop.value.split(",")])
+        print(" -------------------- lab order -------------------- ")
+        print(self.lab_order)
+        print(self.lab_default_joint_pos)
+        print(self.lab_joint_stiffness)
+        print(self.lab_joint_damping)
+        print(self.lab_action_scale)
 
         self.xml_to_lab = [self.xml_order.index(j) for j in self.lab_order]
         self.lab_to_xml = [self.lab_order.index(j) for j in self.xml_order]
@@ -237,6 +249,11 @@ class LocoSim2Sim:
                 self.viewer.render()
 
                 if self.ctrl_step % 50 == 0:
+                    # print(" ------------------ xml ------------------")
+                    # print(xml_joint_pos[self.xml_to_lab])
+                    # print(xml_joint_vel[self.xml_to_lab])
+                    # print(" ------------------ lab ------------------")
+                    # print(self.lab_default_joint_pos)
                     t = i * sim_dt
                     bz = self.d.qpos[2]
                     qw, qx, qy, qz = self.d.qpos[3:7]
@@ -247,8 +264,11 @@ class LocoSim2Sim:
                     err = pd_target - xml_joint_pos_diag
                     trq = (err * self.lab_joint_stiffness[self.lab_to_xml]
                            + (0 - xml_joint_vel_diag) * self.lab_joint_damping[self.lab_to_xml])
+                    ankle_l_z = self.d.xpos[self.ankle_l_id][2]
+                    ankle_r_z = self.d.xpos[self.ankle_r_id][2]
                     print(f"[{self.ctrl_step:5d} t={t:5.1f}s] BaseZ={bz:.3f} "
                           f"Pitch={math.degrees(pitch):5.1f} Roll={math.degrees(roll):5.1f} | "
+                          f"AnkleZ L={ankle_l_z:.3f} R={ankle_r_z:.3f} | "
                           f"ActMean={np.mean(lab_actions):.3f} MaxErr={np.max(np.abs(err)):.3f} "
                           f"MaxTrq={np.max(np.abs(trq)):.0f} | "
                           f"Cmd:vx={self.vel_cmd[0]:.2f} vy={self.vel_cmd[1]:.2f} wz={self.vel_cmd[2]:.2f}")
@@ -274,8 +294,8 @@ class LocoSim2Sim:
 
 if __name__ == "__main__":
     xml_path = "/home/cyborg/Desktop/projects/robot_lab/source/sim2sim/assets/temp/biped_temp_1_0_fixed.xml"
-    policy_path = "/home/cyborg/Desktop/projects/robot_lab/logs/rsl_rl/cyborg_hp_flat/2026-07-09_16-22-59/exported/policy.onnx"
+    policy_path = "/home/cyborg/Desktop/projects/robot_lab/logs/rsl_rl/cyborg_hp_flat/2026-07-09_19-06-34/exported/policy.onnx"
 
     sim = LocoSim2Sim(xml_path, policy_path, history_length=15,
-                      cmd_max=(0., 0., 0.))
+                      cmd_max=(1., 1., 1.))
     sim.run(sim_duration=120.0)
