@@ -23,7 +23,7 @@ class CyborgHPFlatEnvCfg(CyborgHPRoughEnvCfg):
         # Rewards
         self.rewards.track_ang_vel_z_exp.weight = 2.0
         self.rewards.lin_vel_z_l2.weight = -0.2
-        self.rewards.action_rate_l2.weight = -0.002
+        self.rewards.action_rate_l2.weight = -0.02
         self.rewards.joint_acc_l2.weight = 0
         self.rewards.joint_torques_l2.weight = -2.0e-6
         self.rewards.joint_torques_l2.params["asset_cfg"].joint_names = ["J_hip_.*", "J_knee_.*"]
