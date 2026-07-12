@@ -541,6 +541,21 @@ class RewardsCfg:
         },
     )
 
+    feet_step_length = RewTerm(
+        func=mdp.feet_step_length_biped,
+        weight=0.0,
+        params={
+            "command_name": "base_velocity",
+            "cycle_time": 0.8,
+            "min_step_length": 0.08,
+            "max_step_length": 0.22,
+            "std": 0.05,
+            "command_threshold": 0.1,
+            "sensor_cfg": SceneEntityCfg("contact_forces", body_names=""),
+            "asset_cfg": SceneEntityCfg("robot", body_names=""),
+        },
+    )
+
     feet_air_time_variance = RewTerm(
         func=mdp.feet_air_time_variance_penalty,
         weight=0,
