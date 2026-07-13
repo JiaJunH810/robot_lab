@@ -44,7 +44,7 @@ class UniformThresholdVelocityCommand(mdp.UniformVelocityCommand):
         """Resample velocity commands with threshold."""
         super()._resample_command(env_ids)
         # set small commands to zero
-        self.vel_command_b[env_ids, :2] *= (torch.norm(self.vel_command_b[env_ids, :2], dim=1) > 0.2).unsqueeze(1)
+        self.vel_command_b[env_ids, :2] *= (torch.norm(self.vel_command_b[env_ids, :2], dim=1) > 0.1).unsqueeze(1)
 
     def _update_command(self):
         """Update commands and apply terrain-aware restrictions in real-time.
