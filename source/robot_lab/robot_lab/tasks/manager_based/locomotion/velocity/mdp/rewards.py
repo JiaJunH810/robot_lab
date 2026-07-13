@@ -383,63 +383,6 @@ def feet_air_time_positive_biped(env, command_name: str, threshold: float, senso
     return reward
 
 
-def feet_step_length_biped(
-    env: ManagerBasedRLEnv,
-    command_name: str,
-    cycle_time: float,
-    min_step_length: float,
-    max_step_length: float,
-    std: float,
-    command_threshold: float,
-    sensor_cfg: SceneEntityCfg,
-    asset_cfg: SceneEntityCfg,
-) -> torch.Tensor:
-    """Reward commanded sagittal step length when either foot touches down.
-
-    For a gait period ``T``, consecutive left/right touchdowns are separated
-    by approximately ``T / 2``.  The desired step length is therefore
-    ``abs(vx_command) * T / 2``, clipped to a feasible interval.  At each
-    single-foot touchdown, the landing foot's longitudinal displacement from
-    the support foot is measured in the gravity-aligned robot frame.
-
-    The reward is disabled for small forward commands and ambiguous events in
-    which both feet report first contact during the same control step.
-    """
-    contact_sensor: ContactSensor = env.scene.sensors[sensor_cfg.name]
-    asset: Articulation = env.scene[asset_cfg.name]
-
-    if len(sensor_cfg.body_ids) != 2 or len(asset_cfg.body_ids) != 2:
-        raise ValueError("feet_step_length_biped requires exactly two foot bodies")
-
-    first_contact = contact_sensor.compute_first_contact(env.step_dt)[:, sensor_cfg.body_ids]
-    single_touchdown = torch.sum(first_contact.int(), dim=1) == 1
-
-    foot_pos_w = asset.data.body_link_pos_w[:, asset_cfg.body_ids, :]
-    feet_delta_w = foot_pos_w[:, 0, :] - foot_pos_w[:, 1, :]
-    feet_delta_yaw = quat_apply_inverse(yaw_quat(asset.data.root_link_quat_w), feet_delta_w)
-
-    # If foot 0 lands, use foot0-foot1; if foot 1 lands, reverse the sign so
-    # the measurement always describes landing-foot minus support-foot.
-    landing_foot_is_0 = first_contact[:, 0]
-    landing_step_x = torch.where(landing_foot_is_0, feet_delta_yaw[:, 0], -feet_delta_yaw[:, 0])
-
-    command_x = env.command_manager.get_command(command_name)[:, 0]
-    command_sign = torch.where(command_x >= 0.0, 1.0, -1.0)
-    measured_step_length = landing_step_x * command_sign
-    desired_step_length = torch.clamp(
-        torch.abs(command_x) * cycle_time * 0.5,
-        min=min_step_length,
-        max=max_step_length,
-    )
-
-    step_error = torch.square(measured_step_length - desired_step_length)
-    reward = torch.exp(-step_error / std**2)
-    reward *= single_touchdown
-    reward *= torch.abs(command_x) > command_threshold
-    reward *= torch.clamp(-asset.data.projected_gravity_b[:, 2], 0, 0.7) / 0.7
-    return reward
-
-
 def feet_air_time_variance_penalty(env: ManagerBasedRLEnv, sensor_cfg: SceneEntityCfg) -> torch.Tensor:
     """Penalize variance in the amount of time each foot spends in the air/on the ground relative to each other"""
     # extract the used quantities (to enable type-hinting)

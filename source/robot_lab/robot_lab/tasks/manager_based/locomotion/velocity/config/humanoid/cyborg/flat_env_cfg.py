@@ -30,17 +30,8 @@ class CyborgHPFlatEnvCfg(CyborgHPRoughEnvCfg):
         self.rewards.joint_acc_l2.weight = 0
         self.rewards.joint_torques_l2.weight = -2.0e-6
         self.rewards.joint_torques_l2.params["asset_cfg"].joint_names = ["J_hip_.*", "J_knee_.*"]
-        self.rewards.feet_air_time.weight = 2.0
+        self.rewards.feet_air_time.weight = 10.0
         self.rewards.feet_air_time.params["threshold"] = 0.4
-        # Directly reward Encos-like long sagittal steps at foot touchdown.
-        # desired step = |vx_cmd| * 0.8 / 2, clipped to [0.08, 0.22] m.
-        self.rewards.feet_step_length.weight = 5.0
-        self.rewards.feet_step_length.params["cycle_time"] = 0.8
-        self.rewards.feet_step_length.params["min_step_length"] = 0.08
-        self.rewards.feet_step_length.params["max_step_length"] = 0.22
-        self.rewards.feet_step_length.params["std"] = 0.05
-        self.rewards.feet_step_length.params["sensor_cfg"].body_names = [self.foot_link_name]
-        self.rewards.feet_step_length.params["asset_cfg"].body_names = [self.foot_link_name]
         self.rewards.feet_height.weight = -1.5
         # joint_pos_penalty inherits -1.0 from rough_env_cfg
         self.rewards.feet_slide.weight = -0.1
