@@ -31,7 +31,7 @@ class CyborgHPFlatEnvCfg(CyborgHPRoughEnvCfg):
         self.rewards.joint_torques_l2.weight = -2.0e-6
         self.rewards.joint_torques_l2.params["asset_cfg"].joint_names = ["J_hip_.*", "J_knee_.*"]
         self.rewards.feet_air_time.weight = 10.0
-        self.rewards.feet_air_time.params["threshold"] = 0.4
+        self.rewards.feet_air_time.params["threshold"] = 1.0
         self.rewards.feet_height.weight = -1.5
         # joint_pos_penalty inherits -1.0 from rough_env_cfg
         self.rewards.feet_slide.weight = -0.1
