@@ -360,6 +360,111 @@ def feet_air_time(
     return reward
 
 
+class FootStepLengthReward(ManagerTermBase):
+    """Reward swing-foot displacement from liftoff to touchdown.
+
+    The reward is evaluated only on touchdown. Therefore, keeping one foot in
+    front of the other cannot continuously collect reward.
+    """
+
+    def __init__(self, cfg: RewTerm, env: ManagerBasedRLEnv):
+        super().__init__(cfg, env)
+
+        self.asset: Articulation = env.scene[cfg.params["asset_cfg"].name]
+        self.contact_sensor: ContactSensor = env.scene.sensors[cfg.params["sensor_cfg"].name]
+        self.asset_body_ids = cfg.params["asset_cfg"].body_ids
+        selected_sensor_body_ids = cfg.params["sensor_cfg"].body_ids
+
+        # Align contact-sensor indices with the articulation foot order by name.
+        # The two objects normally use the same order, but relying on that
+        # implicitly could associate a touchdown with the wrong liftoff buffer.
+        asset_foot_names = [self.asset.body_names[index] for index in self.asset_body_ids]
+        sensor_foot_names = [self.contact_sensor.body_names[index] for index in selected_sensor_body_ids]
+        if set(asset_foot_names) != set(sensor_foot_names):
+            raise ValueError(
+                "FootStepLengthReward requires matching asset and contact-sensor feet. "
+                f"Received asset feet {asset_foot_names} and sensor feet {sensor_foot_names}."
+            )
+        sensor_name_to_id = {
+            self.contact_sensor.body_names[index]: index for index in selected_sensor_body_ids
+        }
+        self.sensor_body_ids = [sensor_name_to_id[name] for name in asset_foot_names]
+
+        num_asset_feet = len(self.asset_body_ids)
+        self.liftoff_pos_w = torch.zeros(env.num_envs, num_asset_feet, 3, device=env.device)
+        self.has_liftoff = torch.zeros(env.num_envs, num_asset_feet, dtype=torch.bool, device=env.device)
+
+    def reset(self, env_ids=None):
+        """Clear stored liftoff states for environments that have reset."""
+        if env_ids is None:
+            env_ids = slice(None)
+        self.liftoff_pos_w[env_ids] = 0.0
+        self.has_liftoff[env_ids] = False
+
+    def __call__(
+        self,
+        env: ManagerBasedRLEnv,
+        command_name: str,
+        step_length_scale: float,
+        min_step_length: float,
+        max_step_length: float,
+        step_length_std: float,
+        lateral_std: float,
+        command_threshold: float,
+        asset_cfg: SceneEntityCfg,
+        sensor_cfg: SceneEntityCfg,
+    ) -> torch.Tensor:
+        foot_pos_w = self.asset.data.body_pos_w[:, self.asset_body_ids, :]
+        first_air = self.contact_sensor.compute_first_air(env.step_dt)[:, self.sensor_body_ids].bool()
+        first_contact = self.contact_sensor.compute_first_contact(env.step_dt)[:, self.sensor_body_ids].bool()
+
+        # Start a new step by recording each foot's world position at liftoff.
+        self.liftoff_pos_w = torch.where(first_air.unsqueeze(-1), foot_pos_w, self.liftoff_pos_w)
+        self.has_liftoff |= first_air
+
+        # Only a touchdown following a recorded liftoff completes a valid step.
+        valid_touchdown = first_contact & self.has_liftoff
+        displacement_w = foot_pos_w - self.liftoff_pos_w
+        num_feet = displacement_w.shape[1]
+
+        # Express foot displacement in the current gravity-aligned yaw frame so
+        # it can be compared directly with the body-frame velocity command.
+        root_yaw_quat = yaw_quat(self.asset.data.root_quat_w)
+        expanded_yaw_quat = root_yaw_quat.unsqueeze(1).expand(-1, num_feet, -1).reshape(-1, 4)
+        displacement_yaw = quat_apply_inverse(expanded_yaw_quat, displacement_w.reshape(-1, 3)).reshape(
+            env.num_envs, num_feet, 3
+        )
+
+        command_xy = env.command_manager.get_command(command_name)[:, :2]
+        command_speed = torch.linalg.norm(command_xy, dim=1)
+        command_direction = command_xy / torch.clamp(command_speed.unsqueeze(1), min=1.0e-6)
+        lateral_direction = torch.stack((-command_direction[:, 1], command_direction[:, 0]), dim=1)
+
+        step_progress = torch.sum(displacement_yaw[:, :, :2] * command_direction.unsqueeze(1), dim=2)
+        lateral_displacement = torch.sum(displacement_yaw[:, :, :2] * lateral_direction.unsqueeze(1), dim=2)
+
+        target_step_length = torch.clamp(
+            command_speed * step_length_scale,
+            min=min_step_length,
+            max=max_step_length,
+        )
+        step_length_reward = torch.exp(
+            -torch.square(step_progress - target_step_length.unsqueeze(1)) / step_length_std**2
+        )
+        lateral_reward = torch.exp(-torch.square(lateral_displacement) / lateral_std**2)
+
+        reward_per_foot = step_length_reward * lateral_reward * valid_touchdown.float()
+        reward_per_foot *= (command_speed > command_threshold).unsqueeze(1)
+        reward = torch.sum(reward_per_foot, dim=1)
+
+        upright = torch.clamp(-self.asset.data.projected_gravity_b[:, 2], 0.0, 0.7) / 0.7
+        reward *= upright
+
+        # Consume touchdown events so each liftoff can be rewarded only once.
+        self.has_liftoff &= ~first_contact
+        return reward
+
+
 def feet_air_time_positive_biped(env, command_name: str, threshold: float, sensor_cfg: SceneEntityCfg) -> torch.Tensor:
     """Reward long steps taken by the feet for bipeds.
 

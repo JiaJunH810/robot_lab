@@ -106,8 +106,11 @@ class CyborgHPRoughEnvCfg(LocomotionVelocityRoughEnvCfg):
         self.rewards.feet_contact_without_cmd.params["sensor_cfg"].body_names = [self.foot_link_name]
         self.rewards.feet_stumble.weight = 0
         self.rewards.feet_stumble.params["sensor_cfg"].body_names = [self.foot_link_name]
-        self.rewards.feet_air_time_variance.weight = -50.0
+        self.rewards.feet_air_time_variance.weight = -10.0
         self.rewards.feet_air_time_variance.params["sensor_cfg"].body_names = [self.foot_link_name]
+        self.rewards.feet_step_length.weight = 25.0
+        self.rewards.feet_step_length.params["asset_cfg"].body_names = [self.foot_link_name]
+        self.rewards.feet_step_length.params["sensor_cfg"].body_names = [self.foot_link_name]
         self.rewards.feet_slide.weight = -0.2
         self.rewards.feet_slide.params["sensor_cfg"].body_names = [self.foot_link_name]
         self.rewards.feet_slide.params["asset_cfg"].body_names = [self.foot_link_name]
