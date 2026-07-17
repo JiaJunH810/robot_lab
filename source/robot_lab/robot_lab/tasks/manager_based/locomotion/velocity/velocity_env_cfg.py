@@ -628,6 +628,18 @@ class RewardsCfg:
         },
     )
 
+    phase_feet_height = RewTerm(
+        func=mdp.phase_feet_height,
+        weight=0.0,
+        params={
+            "command_name": "base_velocity",
+            "cycle_time": 0.9,
+            "peak_clearance": 0.05,
+            "command_threshold": 0.1,
+            "asset_cfg": SceneEntityCfg("robot", body_names=[""], preserve_order=True,)
+        },
+    )
+
     feet_height_body = RewTerm(
         func=mdp.feet_height_body,
         weight=0.0,

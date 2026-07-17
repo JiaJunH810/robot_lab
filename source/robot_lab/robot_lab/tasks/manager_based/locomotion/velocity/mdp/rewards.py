@@ -593,6 +593,46 @@ def feet_height_body(
     reward *= torch.clamp(-env.scene["robot"].data.projected_gravity_b[:, 2], 0, 0.7) / 0.7
     return reward
 
+def phase_feet_height(
+    env: ManagerBasedRLEnv,
+    command_name: str,
+    asset_cfg: SceneEntityCfg,
+    cycle_time: float,
+    peak_clearance: float,
+    command_threshold: float,
+) -> torch.Tensor:
+    """Penalize deviation from a single-peaked relative swing-foot trajectory.
+
+    The foot order in asset_cfg must be [left, right].
+    """
+    asset: RigidObject = env.scene[asset_cfg.name]
+
+    phase = env.episode_length_buf.float() * env.step_dt / cycle_time
+    phase = torch.remainder(phase, 1.0)
+
+    # Left foot swings during [0.55, 0.95).
+    left_swing = (phase >= 0.55) & (phase < 0.95)
+    left_progress = torch.clamp((phase - 0.55) / 0.40, min=0.0, max=1.0,)
+    # Right foot swings during [0.05, 0.45).
+    right_swing = (phase >= 0.05) & (phase < 0.45)
+    right_progress = torch.clamp((phase - 0.05) / 0.40, min=0.0, max=1.0,)
+    # Single-peaked smooth swing trajectories.
+    left_target = (peak_clearance * torch.sin(torch.pi * left_progress).square())
+    right_target = (peak_clearance * torch.sin(torch.pi * right_progress).square())
+    foot_height = asset.data.body_pos_w[:, asset_cfg.body_ids, 2]
+    # asset_cfg order must be [left, right].
+    left_height_relative = foot_height[:, 0] - foot_height[:, 1]
+    right_height_relative = foot_height[:, 1] - foot_height[:, 0]
+    left_error = torch.square((left_height_relative - left_target) / peak_clearance)
+    right_error = torch.square((right_height_relative - right_target) / peak_clearance)
+
+    # Only the expected swing foot receives a height penalty.
+    penalty = (left_error * left_swing.float() + right_error * right_swing.float())
+    # Avoid excessive reward magnitude when the robot falls.
+    penalty = torch.clamp(penalty, max=4.0)
+    command = env.command_manager.get_command(command_name)
+    moving = ((torch.linalg.norm(command[:, :2], dim=1) > command_threshold) | (torch.abs(command[:, 2]) > command_threshold))
+    return penalty * moving.float()
 
 def feet_slide(
     env: ManagerBasedRLEnv, sensor_cfg: SceneEntityCfg, asset_cfg: SceneEntityCfg = SceneEntityCfg("robot")

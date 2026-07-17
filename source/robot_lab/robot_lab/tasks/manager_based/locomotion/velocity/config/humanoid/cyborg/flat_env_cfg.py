@@ -33,7 +33,6 @@ class CyborgHPFlatEnvCfg(CyborgHPRoughEnvCfg):
         self.rewards.feet_air_time.weight = 0.0
         self.rewards.feet_air_time.params["threshold"] = 0.4
         self.rewards.feet_air_time_variance.weight = 0.0
-        self.rewards.feet_height.weight = -1.5
         # joint_pos_penalty inherits -1.0 from rough_env_cfg
         self.rewards.feet_slide.weight = -0.1
 

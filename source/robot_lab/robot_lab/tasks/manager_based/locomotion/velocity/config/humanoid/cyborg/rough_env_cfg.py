@@ -111,7 +111,7 @@ class CyborgHPRoughEnvCfg(LocomotionVelocityRoughEnvCfg):
         self.rewards.feet_slide.weight = -0.2
         self.rewards.feet_slide.params["sensor_cfg"].body_names = [self.foot_link_name]
         self.rewards.feet_slide.params["asset_cfg"].body_names = [self.foot_link_name]
-        self.rewards.feet_height.weight = -2.5
+        self.rewards.feet_height.weight = 0.0
         self.rewards.feet_height.params["target_height"] = 0.12
         self.rewards.feet_height.params["asset_cfg"].body_names = [self.foot_link_name]
         self.rewards.feet_height_body.weight = 0
@@ -121,6 +121,9 @@ class CyborgHPRoughEnvCfg(LocomotionVelocityRoughEnvCfg):
         self.rewards.periodic_contact_mismatch.weight = -2.0
         self.rewards.periodic_contact_mismatch.params["sensor_cfg"].body_names = ["ankle_l_roll_link", "ankle_r_roll_link"]
         self.rewards.periodic_contact_mismatch.params["sensor_cfg"].preserve_order = True
+        self.rewards.phase_feet_height.weight = -0.5
+        self.rewards.phase_feet_height.params["asset_cfg"].body_names = ["ankle_l_roll_link", "ankle_r_roll_link",]
+        self.rewards.phase_feet_height.params["asset_cfg"].preserve_order = True
 
         # If the weight of rewards is 0, set rewards to None
         if self.__class__.__name__ == "CyborgHPRoughEnvCfg":
