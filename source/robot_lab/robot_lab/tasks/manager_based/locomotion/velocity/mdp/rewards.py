@@ -129,6 +129,46 @@ def joint_pos_penalty(
     return reward
 
 
+def periodic_biped_contact_mismatch(
+    env: ManagerBasedRLEnv, 
+    command_name: str, 
+    cycle_time: float, 
+    force_threshold: float,
+    sensor_cfg: SceneEntityCfg
+) -> torch.Tensor:
+    contact_sensor: ContactSensor = env.scene.sensors[sensor_cfg.name]
+    phase = (env.episode_length_buf.float() * env.step_dt / cycle_time)
+    phase = torch.remainder(phase, 1.0)
+
+    # 接触传感器中的顺序必须确认是 [left, right]
+    forces = contact_sensor.data.net_forces_w_history[:, :, sensor_cfg.body_ids, :]
+    actual_contact = (torch.linalg.norm(forces, dim=-1).max(dim=1)[0] > force_threshold).float()
+
+    # phase:
+    # [0.00, 0.05) 双支撑
+    # [0.05, 0.45) 左支撑
+    # [0.45, 0.55) 双支撑
+    # [0.55, 0.95) 右支撑
+    # [0.95, 1.00) 双支撑
+    left_should_contact = ((phase < 0.55) | (phase >= 0.95))
+    right_should_contact = ((phase < 0.05)| (phase >= 0.45))
+    desired_contact = torch.stack([left_should_contact,right_should_contact],dim=1).float()
+
+    command = env.command_manager.get_command(command_name)
+    moving = ((torch.linalg.norm(command[:, :2], dim=1) > 0.1) | (torch.abs(command[:, 2]) > 0.1))
+    # 静止时不执行周期踏步，要求双脚接触
+    desired_contact = torch.where(
+        moving.unsqueeze(1),
+        desired_contact,
+        torch.ones_like(desired_contact),
+    )
+    stance_miss = desired_contact * (1.0 - actual_contact)
+    swing_contact = (1.0 - desired_contact) * actual_contact
+    reward = (2.0 * stance_miss + swing_contact).mean(dim=1)
+
+    return reward
+
+
 def wheel_vel_penalty(
     env: ManagerBasedRLEnv,
     sensor_cfg: SceneEntityCfg,

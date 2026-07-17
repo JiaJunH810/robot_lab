@@ -135,6 +135,10 @@ class ObservationsCfg:
         """Observations for policy group."""
 
         # observation terms (order preserved)
+        phase = ObsTerm(
+            func=mdp.phase,
+            params={"cycle_time": 0.9}
+        )
         base_lin_vel = ObsTerm(
             func=mdp.base_lin_vel,
             noise=Unoise(n_min=-0.1, n_max=0.1),
@@ -195,6 +199,10 @@ class ObservationsCfg:
         """Observations for critic group."""
 
         # observation terms (order preserved)
+        phase = ObsTerm(
+            func=mdp.phase,
+            params={"cycle_time": 0.9}
+        )
         base_lin_vel = ObsTerm(
             func=mdp.base_lin_vel,
             clip=(-100.0, 100.0),
@@ -451,6 +459,17 @@ class RewardsCfg:
             "stand_still_scale": 5.0,
             "velocity_threshold": 0.5,
             "command_threshold": 0.1,
+        },
+    )
+
+    periodic_contact_mismatch = RewTerm(
+        func=mdp.periodic_biped_contact_mismatch,
+        weight=0.0,
+        params={
+            "command_name": "base_velocity",
+            "cycle_time": 0.9,
+            "force_threshold": 5.0,
+            "sensor_cfg": SceneEntityCfg("contact_forces", body_names="",),
         },
     )
 
