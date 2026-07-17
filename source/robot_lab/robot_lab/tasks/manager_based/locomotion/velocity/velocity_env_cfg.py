@@ -547,22 +547,6 @@ class RewardsCfg:
         params={"sensor_cfg": SceneEntityCfg("contact_forces", body_names="")},
     )
 
-    feet_step_length = RewTerm(
-        func=mdp.FootStepLengthReward,
-        weight=0.0,
-        params={
-            "command_name": "base_velocity",
-            "step_length_scale": 0.55,
-            "min_step_length": 0.08,
-            "max_step_length": 0.32,
-            "step_length_std": 0.08,
-            "lateral_std": 0.10,
-            "command_threshold": 0.10,
-            "asset_cfg": SceneEntityCfg("robot", body_names=""),
-            "sensor_cfg": SceneEntityCfg("contact_forces", body_names=""),
-        },
-    )
-
     feet_gait = RewTerm(
         func=mdp.GaitReward,
         weight=0.0,
