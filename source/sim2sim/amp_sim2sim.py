@@ -281,7 +281,7 @@ class RobotLabAMPSim2Sim:
         sim_duration = 120.0
         sim_dt = 0.001
         sim_decimation = 20
-        anchor_name = "torso_link"
+        anchor_name = "base_link"
         history_length = 4
         action_buffer = np.zeros((self.num_action, ), dtype=np.float32)
 
@@ -316,8 +316,8 @@ class RobotLabAMPSim2Sim:
                     break
 
                 vel_cmd = self.read_joystick_command()
-                vel_cmd[0] = -2.
-                vel_cmd[1] = 0.
+                # vel_cmd[0] = -2.
+                # vel_cmd[1] = 0.
                 print(vel_cmd)
                 # projected gravity: world [0,0,-1] rotated to body frame
                 gravity_w = torch.tensor([0.0, 0.0, -1.0], dtype=torch.float32)
@@ -365,8 +365,8 @@ class RobotLabAMPSim2Sim:
 
 # ================= 主程序 =================
 if __name__ == "__main__":
-    xml_path = "/home/cyborg/Desktop/projects/robot_lab/source/sim2sim/assets/g1/g1_29dof_rev_1_0.xml"
-    policy_path = "/home/cyborg/Desktop/projects/robot_lab/logs/rsl_rl/g1_beyondamp/2026-06-29_13-55-22/exported/policy.onnx"
+    xml_path = "/home/cyborg/Desktop/projects/robot_lab/source/sim2sim/assets/ENX/biped_ENX_1_1.xml"
+    policy_path = "/home/cyborg/Desktop/projects/robot_lab/logs/rsl_rl/cyborg_beyondamp/2026-07-09_10-19-53/exported/policy.onnx"
 
     r = RobotLabAMPSim2Sim(xml_path, policy_path)
     r.run()

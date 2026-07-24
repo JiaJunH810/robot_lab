@@ -1,5 +1,16 @@
-import time
+"""MuJoCo sim2sim runner for the policy used by ``sim2real_encos``.
+
+The observation, history, command filter and PD controller mirror
+``sim2real_Encos.cpp`` together with ``Cyborg_Encos_Config.yaml``.  The policy
+is a TorchScript model with a [1, 705] input (15 frames x 47 values) and a
+12-dimensional action output.
+"""
+
+import argparse
 import math
+import os
+import struct
+import time
 from collections import deque
 
 import mujoco
@@ -8,231 +19,439 @@ import numpy as np
 import torch
 
 
-def quaternion_to_euler(q_wxyz):
-    """q_wxyz: [w, x, y, z] (MuJoCo convention). Returns [roll, pitch, yaw]."""
-    w, x, y, z = q_wxyz
-    t0 = 2.0 * (w * x + y * z)
-    t1 = 1.0 - 2.0 * (x * x + y * y)
-    roll = math.atan2(t0, t1)
-    t2 = 2.0 * (w * y - z * x)
-    t2 = max(-1.0, min(1.0, t2))
-    pitch = math.asin(t2)
-    t3 = 2.0 * (w * z + x * y)
-    t4 = 1.0 - 2.0 * (y * y + z * z)
-    yaw = math.atan2(t3, t4)
-    return np.array([roll, pitch, yaw])
+LEG_JOINT_NAMES = (
+    "J_hip_l_roll", "J_hip_l_yaw", "J_hip_l_pitch",
+    "J_knee_l_pitch", "J_ankle_l_pitch", "J_ankle_l_roll",
+    "J_hip_r_roll", "J_hip_r_yaw", "J_hip_r_pitch",
+    "J_knee_r_pitch", "J_ankle_r_pitch", "J_ankle_r_roll",
+)
+
+
+def quaternion_to_euler(quat_wxyz):
+    """Convert a MuJoCo [w, x, y, z] quaternion to roll, pitch and yaw."""
+    w, x, y, z = quat_wxyz
+    roll = math.atan2(2.0 * (w * x + y * z),
+                      1.0 - 2.0 * (x * x + y * y))
+    sin_pitch = np.clip(2.0 * (w * y - z * x), -1.0, 1.0)
+    pitch = math.asin(float(sin_pitch))
+    yaw = math.atan2(2.0 * (w * z + x * y),
+                     1.0 - 2.0 * (y * y + z * z))
+    return np.array([roll, pitch, yaw], dtype=np.float32)
 
 
 class EncosSim2Sim:
-    def __init__(self, xml_path, policy_path, cmd_vx=0.1, cmd_vy=0.0, cmd_vyaw=0.0):
-        # ---- MuJoCo ----
-        self.m = mujoco.MjModel.from_xml_path(xml_path)
-        self.m.opt.timestep = 0.001
-        self.d = mujoco.MjData(self.m)
-        self.num_leg = 12  # policy only controls leg joints (actuator indices 0-11)
-        self.num_all_actuators = self.m.nu
+    """Run the Encos real-deployment policy against a MuJoCo robot model."""
 
-        # ---- 上半身固定位姿（actuator 索引 12-27） ----
-        # 12:J_waist_yaw  13:J_waist_pitch
-        # 14:J_arm_l_01  15:J_arm_l_02  16:J_arm_l_03  17:J_arm_l_04
-        # 18:J_arm_l_05  19:J_arm_l_06  20:J_arm_l_07
-        # 21:J_arm_r_01  22:J_arm_r_02  23:J_arm_r_03  24:J_arm_r_04
-        # 25:J_arm_r_05  26:J_arm_r_06  27:J_arm_r_07
-        self.upper_body_pose = np.zeros(self.num_all_actuators - self.num_leg)
-        self.upper_body_pose[3]  = -1.4   # J_arm_l_02 (act idx 15)
-        self.upper_body_pose[5]  = -2.09  # J_arm_l_04 (act idx 17)
-        self.upper_body_pose[7]  =  0.9   # J_arm_l_06 (act idx 19)
-        self.upper_body_pose[10] =  1.4   # J_arm_r_02 (act idx 22)
-        self.upper_body_pose[12] =  2.09  # J_arm_r_04 (act idx 24)
-        self.upper_body_pose[14] = -0.9   # J_arm_r_06 (act idx 26)
+    def __init__(self, xml_path, policy_path, cmd=(0.0, 0.0, 0.0),
+                 use_joystick=True):
+        self.sim_dt = 0.001
+        self.control_dt = 0.01
+        self.decimation = int(round(self.control_dt / self.sim_dt))
 
-        # ---- 获取 XML 中腿关节名（前 12 个 actuator） ----
-        self.leg_joint_names = [
-            mujoco.mj_id2name(self.m, mujoco.mjtObj.mjOBJ_ACTUATOR, i)
-            for i in range(self.num_leg)
-        ]
+        self.model = mujoco.MjModel.from_xml_path(xml_path)
+        self.model.opt.timestep = self.sim_dt
+        self.data = mujoco.MjData(self.model)
 
-        # ---- Policy 参数（与 Cyborg_Encos_Config.yaml 对齐） ----
-        self.default_angle = np.array([
-            0.0, 0.0,  0.4,  0.7,  0.3, 0.0,   # left
-            0.0, 0.0, -0.4, -0.7, -0.3, 0.0,   # right
-        ])
+        # Active values in Cyborg_Encos_Config.yaml.
+        self.default_q = np.array([
+            0.0, 0.0, 0.4, 0.7, 0.3, 0.0,
+            0.0, 0.0, -0.4, -0.7, -0.3, 0.0,
+        ], dtype=np.float32)
         self.action_scale = np.array([
             0.4, 0.35, 0.35, 0.35, 0.35, 0.35,
             0.4, 0.35, 0.35, 0.35, 0.35, 0.35,
-        ])
+        ], dtype=np.float32)
         self.kp = np.array([
-            250, 120, 300, 300, 80, 80,
-            250, 120, 300, 300, 80, 80,
-        ])
+            250.0, 120.0, 300.0, 300.0, 80.0, 80.0,
+            250.0, 120.0, 300.0, 300.0, 80.0, 80.0,
+        ], dtype=np.float32)
         self.kd = np.array([
-            10, 10, 10, 10, 3, 3,
-            10, 10, 10, 10, 3, 3,
-        ])
+            10.0, 10.0, 10.0, 10.0, 3.0, 3.0,
+            10.0, 10.0, 10.0, 10.0, 3.0, 3.0,
+        ], dtype=np.float32)
+        self.stance_kp = np.array([
+            300.0, 300.0, 500.0, 500.0, 400.0, 400.0,
+            300.0, 300.0, 500.0, 500.0, 400.0, 400.0,
+        ], dtype=np.float32)
+        self.stance_kd = np.array([
+            15.0, 12.0, 19.0, 25.0, 20.0, 20.0,
+            15.0, 12.0, 19.0, 25.0, 20.0, 20.0,
+        ], dtype=np.float32)
+
         self.cycle_time = 0.8
-        self.control_dt = 0.01          # 100 Hz
-        self.sim_decimation = 10        # 0.001 * 10 = 0.01
         self.clip_obs = 50.0
-        self.clip_act = 5.0
+        self.clip_action = 5.0
         self.frame_stack = 15
-        self.num_single_obs = 47
-        self.num_observations = self.frame_stack * self.num_single_obs  # 705
+        self.single_obs_size = 47
+        self.policy_input_size = self.frame_stack * self.single_obs_size
 
-        # ---- 指令速度 ----
-        self.cmd_vx = cmd_vx
-        self.cmd_vy = cmd_vy
-        self.cmd_vyaw = cmd_vyaw
+        self.leg_qpos_addr, self.leg_dof_addr, self.leg_actuator_ids = (
+            self._resolve_leg_indices()
+        )
+        self.ankle_l_id = mujoco.mj_name2id(
+            self.model, mujoco.mjtObj.mjOBJ_BODY, "ankle_l_roll_link")
+        self.ankle_r_id = mujoco.mj_name2id(
+            self.model, mujoco.mjtObj.mjOBJ_BODY, "ankle_r_roll_link")
+        self.upper_joint_ids = self._upper_joint_ids()
+        self.upper_targets = self._make_upper_targets()
 
-        # ---- 加载策略 ----
-        self.policy = torch.jit.load(policy_path).eval()
-        print(f"[EncosSim2Sim] Policy loaded from {policy_path}")
+        self.policy = torch.jit.load(policy_path, map_location="cpu").eval()
+        self._validate_policy()
+        print(f"[EncosSim2Sim] XML: {xml_path}")
+        print(f"[EncosSim2Sim] Policy: {policy_path}")
+        print(f"[EncosSim2Sim] Leg order: {list(LEG_JOINT_NAMES)}")
 
-        # ---- 初始化 MuJoCo ----
-        mujoco.mj_resetDataKeyframe(self.m, self.d, 0)
-        self._set_default_pose()
-        mujoco.mj_step(self.m, self.d)
-
-        # ---- Viewer ----
-        self.viewer = mujoco.viewer.launch_passive(self.m, self.d)
-        self.viewer.cam.distance = 2.0
-        self.viewer.cam.lookat = [0, 0, 0.5]
-
-        # ---- 观测历史 ----
-        self.hist_obs = deque(
-            [np.zeros(self.num_single_obs) for _ in range(self.frame_stack)],
+        self.history = deque(
+            (np.zeros(self.single_obs_size, dtype=np.float32)
+             for _ in range(self.frame_stack)),
             maxlen=self.frame_stack,
         )
-        self.last_action = np.zeros(self.num_leg)
-        self.lowlevel_cnt = 0
+        self.action = np.zeros(12, dtype=np.float32)
+        self.target_cmd = np.asarray(cmd, dtype=np.float32)
+        if self.target_cmd.shape != (3,):
+            raise ValueError("cmd must contain exactly (vx, vy, yaw_rate)")
+        # The real callback rounds joystick commands to one decimal place.
+        self.target_cmd = np.round(self.target_cmd * 10.0) / 10.0
+        self.command = np.zeros(3, dtype=np.float32)
+        self.lowlevel_count = 0
+        self.walk_stand_count = 0
+        self.desired_heading = 0.0
+        self.heading_initialized = False
 
-    def _set_default_pose(self):
-        """设置初始站立位姿。qpos 布局: [px,py,pz, qw,qx,qy,qz,  joint0, ..., joint27]"""
-        qpos = self.d.qpos.copy()
-        qpos[2] = 0.94  # base height
-        qpos[3:7] = [1, 0, 0, 0]  # identity quat
-        # 腿
-        for i in range(self.num_leg):
-            qpos[7 + i] = self.default_angle[i]
-        # 上半身（腰+臂）：设为固定位姿
-        for i in range(len(self.upper_body_pose)):
-            qpos[7 + self.num_leg + i] = self.upper_body_pose[i]
-        self.d.qpos[:] = qpos
-        self.d.qvel[:] = 0.0
+        self.use_joystick = use_joystick
+        self.joystick_fd = self._open_joystick() if use_joystick else None
+        self.joystick_axes = {}
+        self.joystick_buttons = set()
+        self.joystick_mapped = False
+        # Match loco_sim2sim.py's GameSir mapping.  Stick-up/left values from
+        # Linux joystick devices are negative, hence the minus signs below.
+        self.joystick_axis_vx = 1   # left stick Y
+        self.joystick_axis_vy = 0   # left stick X
+        self.joystick_axis_yaw = 3  # right stick X
+        # Match Cyborg_Encos_Config.yaml joy_forward/joy_side/joy_turn.
+        self.joystick_cmd_max = np.array([0.44, 0.8, 0.6], dtype=np.float32)
 
-    def _clip(self, val, lo, hi):
-        return np.clip(val, lo, hi)
+        mujoco.mj_resetData(self.model, self.data)
+        self._set_initial_pose()
+        mujoco.mj_forward(self.model, self.data)
 
-    def _compute_obs(self):
-        """与 C++ ComputeObs() 对齐: sin_cos, commands, dof_pos, dof_vel, actions, ang_vel, eu_ang"""
-        phase = 2.0 * math.pi * self.lowlevel_cnt * self.control_dt / self.cycle_time
+    def _resolve_leg_indices(self):
+        qpos_addr = []
+        dof_addr = []
+        actuator_ids = []
+        for name in LEG_JOINT_NAMES:
+            joint_id = mujoco.mj_name2id(
+                self.model, mujoco.mjtObj.mjOBJ_JOINT, name)
+            actuator_id = mujoco.mj_name2id(
+                self.model, mujoco.mjtObj.mjOBJ_ACTUATOR, name)
+            if joint_id < 0 or actuator_id < 0:
+                raise ValueError(f"MuJoCo XML is missing leg joint/actuator {name!r}")
+            qpos_addr.append(self.model.jnt_qposadr[joint_id])
+            dof_addr.append(self.model.jnt_dofadr[joint_id])
+            actuator_ids.append(actuator_id)
+        return (np.asarray(qpos_addr), np.asarray(dof_addr),
+                np.asarray(actuator_ids))
 
-        # -- sin_cos --
-        sin_cos = np.array([math.sin(phase), math.cos(phase)])
+    def _upper_joint_ids(self):
+        leg_ids = {
+            mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_JOINT, name)
+            for name in LEG_JOINT_NAMES
+        }
+        return [joint_id for joint_id in range(self.model.njnt)
+                if self.model.jnt_type[joint_id] != mujoco.mjtJoint.mjJNT_FREE
+                and joint_id not in leg_ids]
 
-        # -- commands (C++: cmd.command * obs_scales) --
-        commands = np.array([
-            self.cmd_vx * 2.0,
-            self.cmd_vy * 2.0,
-            self.cmd_vyaw * 1.0,
-        ])
+    def _make_upper_targets(self):
+        # Pose used by the previous Encos sim2sim setup. Missing joints are
+        # simply ignored, so the lower-body-only XML is also supported.
+        desired = {
+            "J_waist_yaw": 0.0,
+            "J_waist_pitch": 0.0,
+            "J_arm_l_02": -1.4,
+            "J_arm_l_04": -2.09,
+            "J_arm_l_06": 0.9,
+            "J_arm_r_02": 1.4,
+            "J_arm_r_04": 2.09,
+            "J_arm_r_06": -0.9,
+        }
+        targets = {}
+        for joint_id in self.upper_joint_ids:
+            name = mujoco.mj_id2name(
+                self.model, mujoco.mjtObj.mjOBJ_JOINT, joint_id)
+            value = desired.get(name, 0.0)
+            if self.model.jnt_limited[joint_id]:
+                low, high = self.model.jnt_range[joint_id]
+                value = float(np.clip(value, low, high))
+            targets[joint_id] = value
+        return targets
 
-        # -- joint state (只取腿关节, qpos[7:7+12]) --
-        q = self.d.qpos[7:7 + self.num_leg].copy()
-        dq = self.d.qvel[6:6 + self.num_leg].copy()  # qvel[0:3]=lin vel, [3:6]=ang vel
-        dof_pos = q - self.default_angle       # * 1.0
-        dof_vel = dq * 0.05
+    def _validate_policy(self):
+        sample = torch.zeros((1, self.policy_input_size), dtype=torch.float32)
+        try:
+            with torch.inference_mode():
+                output = self.policy(sample)
+                if isinstance(output, tuple):
+                    output = output[0]
+        except Exception as exc:
+            raise ValueError(
+                f"Policy does not accept [1, {self.policy_input_size}] input"
+            ) from exc
+        if tuple(output.shape) != (1, 12):
+            raise ValueError(f"Expected policy output [1, 12], got {tuple(output.shape)}")
 
-        # -- actions --
-        actions = self.last_action.copy()
+    def _set_initial_pose(self):
+        self.data.qpos[0:3] = (0.0, 0.0, 0.94)
+        self.data.qpos[3:7] = (1.0, 0.0, 0.0, 0.0)
+        self.data.qpos[self.leg_qpos_addr] = self.default_q
+        for joint_id, target in self.upper_targets.items():
+            self.data.qpos[self.model.jnt_qposadr[joint_id]] = target
+        self.data.qvel[:] = 0.0
+        self.data.ctrl[:] = 0.0
 
-        # -- ang_vel (body frame) --
-        ang_vel = self.d.qvel[3:6].copy()       # * 1.0
+    @staticmethod
+    def _rate_limit(current, target, max_step=0.002):
+        return current + np.clip(target - current, -max_step, max_step)
 
-        # -- eu_ang --
-        base_quat = self.d.qpos[3:7].copy()     # [qw, qx, qy, qz]
-        eu_ang = quaternion_to_euler(base_quat)
-        eu_ang = np.where(eu_ang > math.pi, eu_ang - 2 * math.pi, eu_ang)
+    @staticmethod
+    def _open_joystick():
+        for path in ("/dev/input/js0", "/dev/input/js1", "/dev/input/js2"):
+            try:
+                fd = os.open(path, os.O_RDONLY | os.O_NONBLOCK)
+                print(f"[Joystick] Opened {path}; axes 1/0/3 -> vx/vy/yaw")
+                return fd
+            except OSError:
+                pass
+        print("[Joystick] Not found; using the command-line fixed command")
+        return None
 
-        obs = np.concatenate([
-            sin_cos,      # 2
-            commands,     # 3
-            dof_pos,      # 12
-            dof_vel,      # 12
-            actions,      # 12
-            ang_vel,      # 3
-            eu_ang,       # 3
-        ])  # 47
+    def _update_joystick_target(self):
+        if self.joystick_fd is None:
+            return
+        while True:
+            try:
+                event = os.read(self.joystick_fd, 8)
+                if len(event) != 8:
+                    break
+                _, value, event_type, number = struct.unpack("<IhBB", event)
+                event_type &= 0x7F  # Remove the Linux JS_EVENT_INIT flag.
+                if event_type == 0x02:
+                    self.joystick_axes[number] = float(value) / 32767.0
+                elif event_type == 0x01:
+                    if value:
+                        self.joystick_buttons.add(number)
+                    else:
+                        self.joystick_buttons.discard(number)
+            except BlockingIOError:
+                break
+            except OSError:
+                return
 
-        obs = self._clip(obs, -self.clip_obs, self.clip_obs)
-        return obs
+        if self.joystick_buttons and not self.joystick_mapped:
+            print(f"[Joystick] axes={dict(sorted(self.joystick_axes.items()))} "
+                  f"buttons={sorted(self.joystick_buttons)}")
+            self.joystick_mapped = True
 
-    def _build_policy_input(self):
-        """帧堆叠: [f0_47 | f1_47 | ... | f14_47], 最老在前"""
-        policy_input = np.zeros(self.num_observations, dtype=np.float32)
-        for i, obs in enumerate(self.hist_obs):
-            policy_input[i * self.num_single_obs:(i + 1) * self.num_single_obs] = obs
-        return policy_input.reshape(1, -1)
+        def deadzone(value, threshold=0.1):
+            return 0.0 if abs(value) < threshold else value
 
-    def _forward(self, policy_input):
-        """TorchScript 推理，返回 12 维 action 并 clip"""
-        with torch.no_grad():
-            t = torch.from_numpy(policy_input)
-            output = self.policy.forward(t)
+        stick = np.array([
+            -deadzone(self.joystick_axes.get(self.joystick_axis_vx, 0.0)),
+            -deadzone(self.joystick_axes.get(self.joystick_axis_vy, 0.0)),
+            -deadzone(self.joystick_axes.get(self.joystick_axis_yaw, 0.0)),
+        ], dtype=np.float32)
+        joystick_cmd = stick * self.joystick_cmd_max
+
+        # Keep the real deployment's one-decimal command quantization.
+        self.target_cmd = np.round(joystick_cmd * 10.0) / 10.0
+        # GameSir A button: immediately zero all velocity directions.
+        if 0 in self.joystick_buttons:
+            self.target_cmd[:] = 0.0
+            self.command[:] = 0.0
+
+    def _scaled_command(self, euler, body_ang_vel):
+        self._update_joystick_target()
+        self.command = self._rate_limit(self.command, self.target_cmd)
+        scaled = self.command * np.array([2.0, 2.0, 1.0], dtype=np.float32)
+
+        walking = float(np.abs(self.command).sum()) > 0.1
+        if walking and not self.heading_initialized:
+            self.desired_heading = float(euler[2])
+            self.heading_initialized = True
+
+        if walking and abs(float(self.command[2])) < 0.05:
+            yaw_error = math.atan2(
+                math.sin(float(euler[2]) - self.desired_heading),
+                math.cos(float(euler[2]) - self.desired_heading),
+            )
+            correction = -(1.5 * yaw_error + 0.3 * float(body_ang_vel[2]))
+            scaled[2] = np.clip(correction, -0.5, 0.5)
+        elif abs(float(self.command[2])) >= 0.05:
+            self.desired_heading = float(euler[2])
+        elif not walking:
+            self.desired_heading = float(euler[2])
+            self.heading_initialized = False
+        return scaled, walking
+
+    def _compute_observation(self):
+        # C++ ComputeObs increments this before calculating the phase.
+        self.lowlevel_count += 1
+        phase = (2.0 * math.pi * self.lowlevel_count * self.control_dt
+                 / self.cycle_time)
+        sin_cos = np.array([math.sin(phase), math.cos(phase)], dtype=np.float32)
+
+        q = self.data.qpos[self.leg_qpos_addr].astype(np.float32, copy=True)
+        dq = self.data.qvel[self.leg_dof_addr].astype(np.float32, copy=True)
+        # MuJoCo free-joint rotational qvel is expressed in the local body frame.
+        body_ang_vel = self.data.qvel[3:6].astype(np.float32, copy=True)
+        euler = quaternion_to_euler(self.data.qpos[3:7])
+        commands, walking = self._scaled_command(euler, body_ang_vel)
+
+        if walking:
+            self.walk_stand_count = 0
+        elif self.walk_stand_count <= 160:
+            commands[:] = 0.0
+            self.walk_stand_count += 1
+        elif abs(float(euler[0])) >= 0.1 or abs(float(euler[1])) >= 0.1:
+            self.walk_stand_count = 0
+        else:
+            sin_cos[:] = 0.0
+            commands[:] = 0.0
+
+        obs = np.concatenate((
+            sin_cos,
+            commands,
+            q - self.default_q,
+            dq * 0.05,
+            self.action,
+            body_ang_vel,
+            euler,
+        )).astype(np.float32)
+        if obs.size != self.single_obs_size:
+            raise RuntimeError(f"Expected 47 observations, built {obs.size}")
+        return np.clip(obs, -self.clip_obs, self.clip_obs)
+
+    def _infer(self, observation):
+        self.history.append(observation)
+        policy_input = np.concatenate(tuple(self.history)).reshape(1, -1)
+        tensor = torch.from_numpy(policy_input)
+        with torch.inference_mode():
+            output = self.policy(tensor)
             if isinstance(output, tuple):
-                action_tensor = output[0]
-            else:
-                action_tensor = output
-            action = action_tensor.detach().numpy().squeeze()
-        action = self._clip(action, -self.clip_act, self.clip_act)
-        return action
+                output = output[0]
+        action = output.detach().cpu().numpy().reshape(-1)
+        return np.clip(action, -self.clip_action, self.clip_action).astype(np.float32)
 
-    def step(self):
-        """单次控制步: 取观测 → 推策略 → PD → 发扭矩"""
-        # ---- 计算观测 & 帧堆叠 ----
-        obs = self._compute_obs()
-        self.hist_obs.append(obs)
-        policy_input = self._build_policy_input()
+    def _apply_pd(self, leg_target, kp=None, kd=None):
+        if kp is None:
+            kp = self.kp
+        if kd is None:
+            kd = self.kd
+        q = self.data.qpos[self.leg_qpos_addr]
+        dq = self.data.qvel[self.leg_dof_addr]
+        self.data.ctrl[:] = 0.0
+        self.data.ctrl[self.leg_actuator_ids] = (leg_target - q) * kp - dq * kd
 
-        # ---- 推理 ----
-        self.last_action = self._forward(policy_input)
+        # The real deployment only owns the legs; in the full-body simulation
+        # the remaining joints need a separate pose holder to represent the
+        # upper-body controllers. Lower-body-only XMLs skip this block.
+        for joint_id, target in self.upper_targets.items():
+            name = mujoco.mj_id2name(
+                self.model, mujoco.mjtObj.mjOBJ_JOINT, joint_id)
+            actuator_id = mujoco.mj_name2id(
+                self.model, mujoco.mjtObj.mjOBJ_ACTUATOR, name)
+            if actuator_id < 0:
+                continue
+            qpos_addr = self.model.jnt_qposadr[joint_id]
+            dof_addr = self.model.jnt_dofadr[joint_id]
+            self.data.ctrl[actuator_id] = (
+                80.0 * (target - self.data.qpos[qpos_addr])
+                - 5.0 * self.data.qvel[dof_addr]
+            )
 
-        # ---- action → target_q ----
-        target_q = self.last_action * self.action_scale + self.default_angle
+    def _settle(self, seconds):
+        for _ in range(max(0, int(seconds / self.sim_dt))):
+            self._apply_pd(self.default_q, self.stance_kp, self.stance_kd)
+            mujoco.mj_step(self.model, self.data)
 
-        # ---- PD 控制（仅腿关节） ----
-        q = self.d.qpos[7:7 + self.num_leg]
-        dq = self.d.qvel[6:6 + self.num_leg]
-        leg_torque = (target_q - q) * self.kp + (0.0 - dq) * self.kd
+    def run(self, duration=60.0, settle_duration=1.0, realtime=True):
+        """Open the viewer and execute the policy for ``duration`` seconds."""
+        self._settle(settle_duration)
+        control_steps = int(duration / self.control_dt)
+        target_q = self.default_q.copy()
 
-        # ---- 填充 actuator 扭矩：只控腿，上半身不给力矩 ----
-        torque = np.zeros(self.num_all_actuators)
-        torque[:self.num_leg] = leg_torque
-        self.d.ctrl = torque
+        with mujoco.viewer.launch_passive(self.model, self.data) as viewer:
+            viewer.cam.distance = 3.0
+            viewer.cam.azimuth = 90.0
+            viewer.cam.elevation = -20.0
+            for step in range(control_steps):
+                if not viewer.is_running():
+                    break
+                wall_start = time.monotonic()
+                observation = self._compute_observation()
+                self.action = self._infer(observation)
+                target_q = self.default_q + self.action * self.action_scale
 
-        # ---- 上半身完全固定：直接覆写 qpos/qvel，锁死在初始位姿 ----
-        self.d.qpos[7 + self.num_leg:7 + self.num_all_actuators] = self.upper_body_pose.copy()
-        self.d.qvel[6 + self.num_leg:6 + self.num_all_actuators] = 0.0
+                for _ in range(self.decimation):
+                    self._apply_pd(target_q)
+                    mujoco.mj_step(self.model, self.data)
 
-        # ---- 物理步进（decimation=10） ----
-        for _ in range(self.sim_decimation):
-            mujoco.mj_step(self.m, self.d)
+                viewer.cam.lookat[:] = self.data.qpos[:3]
+                viewer.sync()
+                if step % 100 == 0:
+                    euler = quaternion_to_euler(self.data.qpos[3:7])
+                    print(
+                        f"[t={step * self.control_dt:6.2f}s] "
+                        f"z={self.data.qpos[2]:.3f} "
+                        f"ankleL={self.data.xpos[self.ankle_l_id][2]:.3f} "
+                        f"ankleR={self.data.xpos[self.ankle_r_id][2]:.3f} "
+                        f"roll={math.degrees(float(euler[0])):6.1f}deg "
+                        f"pitch={math.degrees(float(euler[1])):6.1f}deg "
+                        f"cmd=({self.command[0]:.2f}, {self.command[1]:.2f}, "
+                        f"{self.command[2]:.2f})"
+                    )
+                if realtime:
+                    remaining = self.control_dt - (time.monotonic() - wall_start)
+                    if remaining > 0.0:
+                        time.sleep(remaining)
 
-        self.lowlevel_cnt += 1
+        if self.joystick_fd is not None:
+            os.close(self.joystick_fd)
+            self.joystick_fd = None
 
-    def run(self, duration=60.0):
-        """主循环"""
-        sim_dt = self.m.opt.timestep
-        steps = int(duration / (sim_dt * self.sim_decimation))
-        for _ in range(steps):
-            self.step()
-            self.viewer.sync()
-            time.sleep(sim_dt * self.sim_decimation)
-        self.viewer.close()
+
+def parse_args():
+    project_root = "/home/cyborg/Desktop/projects"
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument(
+        "--xml",
+        default=(f"{project_root}/robot_lab/source/sim2sim/assets/temp/"
+                 "biped_temp_1_0_fixed.xml"),
+    )
+    parser.add_argument(
+        "--policy",
+        default=(f"{project_root}/sim2real_encos/src/deploy_real/policies/"
+                 "c10000.pt"),
+    )
+    parser.add_argument("--duration", type=float, default=60.0)
+    parser.add_argument("--settle-duration", type=float, default=1.0)
+    parser.add_argument("--vx", type=float, default=0.0)
+    parser.add_argument("--vy", type=float, default=0.0)
+    parser.add_argument("--yaw", type=float, default=0.0)
+    parser.add_argument("--no-joystick", action="store_true")
+    parser.add_argument("--no-realtime", action="store_true")
+    return parser.parse_args()
 
 
 if __name__ == "__main__":
-    xml_path = "/home/cyborg/Desktop/projects/robot_lab/source/sim2sim/assets/temp/biped_temp_1_0.xml"
-    policy_path = "/home/cyborg/Desktop/projects/sim2real_encos/src/deploy_real/policies/c10000.pt"
-
-    sim = EncosSim2Sim(xml_path, policy_path, cmd_vx=0.3, cmd_vy=0.0, cmd_vyaw=0.0)
-    sim.run(duration=60.0)
+    args = parse_args()
+    simulator = EncosSim2Sim(
+        args.xml,
+        args.policy,
+        cmd=(args.vx, args.vy, args.yaw),
+        use_joystick=not args.no_joystick,
+    )
+    simulator.run(
+        duration=args.duration,
+        settle_duration=args.settle_duration,
+        realtime=not args.no_realtime,
+    )

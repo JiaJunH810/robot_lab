@@ -5,7 +5,7 @@
       </option>
     <default>
       <joint damping="0.001" frictionloss="0.1"/>
-      <geom solref="0.005 1" friction="1.0"/>
+      <geom solref="0.0001 1" friction="1.0"/>
     </default>
   <asset>
     <mesh name="base_link" file="base_link.STL"/>

@@ -82,6 +82,27 @@ CYBORG_HALF_PED_CFG = ArticulationCfg(
             stiffness=STIFFNESS_10020_24,
             damping=DAMPING_10020_24,
             armature=ARMATURE_10020_24,
+            friction={
+                "J_hip_l_roll": 2.35,
+                "J_hip_r_roll": 2.35,
+                "J_hip_l_yaw": 2.20,
+                "J_hip_r_yaw": 1.55,
+                "J_hip_l_pitch": 2.50,
+                "J_hip_r_pitch": 2.85,
+                "J_knee_l_pitch": 2.00,
+                "J_knee_r_pitch": 2.90,
+            },
+            dynamic_friction={
+                "J_hip_l_roll": 1.998,
+                "J_hip_r_roll": 1.998,
+                "J_hip_l_yaw": 1.87,
+                "J_hip_r_yaw": 1.318,
+                "J_hip_l_pitch": 2.125,
+                "J_hip_r_pitch": 2.423,
+                "J_knee_l_pitch": 1.70,
+                "J_knee_r_pitch": 2.465,
+            },
+            viscous_friction=0.3,
         ),
         # 踝: EC-A6416-P2-25 (ratio 25)
         "feet": ImplicitActuatorCfg(
@@ -91,6 +112,19 @@ CYBORG_HALF_PED_CFG = ArticulationCfg(
             stiffness=STIFFNESS_6416,
             damping=DAMPING_6416,
             armature=ARMATURE_6416,
+            friction={
+                "J_ankle_l_pitch": 1.50,
+                "J_ankle_r_pitch": 1.70,
+                "J_ankle_l_roll": 0.45,
+                "J_ankle_r_roll": 0.50,
+            },
+            dynamic_friction={
+                "J_ankle_l_pitch": 1.275,
+                "J_ankle_r_pitch": 1.445,
+                "J_ankle_l_roll": 0.383,
+                "J_ankle_r_roll": 0.425,
+            },
+            viscous_friction=0.3,
         ),
     },
 )

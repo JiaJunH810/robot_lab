@@ -36,9 +36,10 @@ def projected_gravity(quat_wxyz):
 
 class LocoSim2Sim:
     def __init__(self, xml_path, policy_path, history_length=15,
-                 cmd_max=(0.5, 0.5, 0.5)):
+                 cmd_max=(0.5, 0.5, 0.5), cycle_time=0.9):
         self.history_length = history_length
         self.cmd_max = cmd_max  # (vx_max, vy_max, wz_max)
+        self.cycle_time = cycle_time
 
         self.m = mujoco.MjModel.from_xml_path(xml_path)
         self.m.opt.timestep = 0.001
@@ -59,12 +60,24 @@ class LocoSim2Sim:
         self.policy = onnxruntime.InferenceSession(policy_path)
         self._load_metadata(onnx_model)
 
+        self.hist_phase = np.zeros((history_length, 2), dtype=np.float32)
         self.hist_cmd  = np.zeros((history_length, 3), dtype=np.float32)
         self.hist_ang  = np.zeros((history_length, 3), dtype=np.float32)
         self.hist_grav = np.zeros((history_length, 3), dtype=np.float32)
         self.hist_pos  = np.zeros((history_length, self.num_action), dtype=np.float32)
         self.hist_vel  = np.zeros((history_length, self.num_action), dtype=np.float32)
         self.hist_act  = np.zeros((history_length, self.num_action), dtype=np.float32)
+
+        # Actor observation per frame:
+        # phase(2) + ang_vel(3) + gravity(3) + command(3)
+        # + joint_pos(12) + joint_vel(12) + last_action(12) = 47.
+        self.expected_obs_dim = history_length * (11 + 3 * self.num_action)
+        policy_obs_dim = self.policy.get_inputs()[0].shape[-1]
+        if isinstance(policy_obs_dim, int) and policy_obs_dim != self.expected_obs_dim:
+            raise ValueError(
+                f"Policy expects {policy_obs_dim} observations, but sim2sim builds {self.expected_obs_dim}. "
+                "Check phase observation, history length, and joint count."
+            )
 
         self.action_buffer = np.zeros(self.num_action, dtype=np.float32)
         self.vel_cmd = np.array([0.0, 0.0, 0.0], dtype=np.float32)
@@ -194,11 +207,23 @@ class LocoSim2Sim:
 
         for i in tqdm(range(total_steps), desc="Running..."):
             if i % sim_decimation == 0:
+                phase_step = self.ctrl_step
                 self.ctrl_step += 1
+
+                # Match mdp.phase(): episode_length_buf * step_dt / cycle_time.
+                # phase_step starts at zero, matching the initial Isaac Lab observation.
+                policy_dt = sim_dt * sim_decimation
+                phase = (phase_step * policy_dt / self.cycle_time) % 1.0
+                phase_obs = np.array([
+                    math.sin(2.0 * math.pi * phase),
+                    math.cos(2.0 * math.pi * phase),
+                ], dtype=np.float32)
 
                 # ---- Velocity command: joystick or uniform random ----
                 if self._js_fd is not None:
                     self.vel_cmd = self._get_joystick_cmd()
+                    if np.linalg.norm(self.vel_cmd[:2]) < 0.2:
+                        self.vel_cmd[:2] = 0.0
                 else:
                     self.cmd_resample_timer += 1
                     if self.cmd_resample_timer >= self.cmd_resample_interval:
@@ -211,6 +236,7 @@ class LocoSim2Sim:
                             self.vel_cmd[:2] = 0.0
                         self.cmd_resample_timer = 0
 
+
                 xml_joint_pos = self.d.qpos.astype(np.float32)[-self.num_action:]
                 xml_joint_vel = self.d.qvel.astype(np.float32)[-self.num_action:]
                 root_quat = self.d.qpos.astype(np.float32)[3:7].copy()
@@ -222,6 +248,7 @@ class LocoSim2Sim:
                 joint_pos_rel = xml_joint_pos[self.xml_to_lab] - self.lab_default_joint_pos
                 joint_vel_rel = xml_joint_vel[self.xml_to_lab]
 
+                self._push_history(self.hist_phase, phase_obs)
                 self._push_history(self.hist_cmd,  self.vel_cmd)
                 self._push_history(self.hist_ang,  base_ang_vel_body * 0.25)
                 self._push_history(self.hist_grav, proj_grav)
@@ -230,6 +257,7 @@ class LocoSim2Sim:
                 self._push_history(self.hist_act,  self.action_buffer)
 
                 obs = np.concatenate([
+                    self.hist_phase.flatten(),
                     self.hist_ang.flatten(),
                     self.hist_grav.flatten(),
                     self.hist_cmd.flatten(),
@@ -254,6 +282,7 @@ class LocoSim2Sim:
                     # print(xml_joint_vel[self.xml_to_lab])
                     # print(" ------------------ lab ------------------")
                     # print(self.lab_default_joint_pos)
+                    # print(lab_actions)
                     t = i * sim_dt
                     bz = self.d.qpos[2]
                     qw, qx, qy, qz = self.d.qpos[3:7]
@@ -294,8 +323,8 @@ class LocoSim2Sim:
 
 if __name__ == "__main__":
     xml_path = "/home/cyborg/Desktop/projects/robot_lab/source/sim2sim/assets/temp/biped_temp_1_0_fixed.xml"
-    policy_path = "/home/cyborg/Desktop/projects/robot_lab/logs/rsl_rl/cyborg_hp_flat/2026-07-09_19-06-34/exported/policy.onnx"
+    policy_path = "/home/cyborg/Desktop/projects/robot_lab/logs/rsl_rl/cyborg_hp_flat/2026-07-17_16-39-34/exported/policy.onnx"
 
     sim = LocoSim2Sim(xml_path, policy_path, history_length=15,
-                      cmd_max=(1., 1., 1.))
+                      cmd_max=(0.0, 0.0, 0.0))
     sim.run(sim_duration=120.0)

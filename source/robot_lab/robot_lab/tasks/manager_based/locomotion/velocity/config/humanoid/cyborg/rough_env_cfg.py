@@ -37,8 +37,15 @@ class CyborgHPRoughEnvCfg(LocomotionVelocityRoughEnvCfg):
         self.observations.critic.height_scan = None
 
         # ------------------------------Actions------------------------------
-        self.actions.joint_pos.scale = CYBORG_HALF_PED_ACTION_SCALE
-        self.actions.joint_pos.clip = {".*": (-100.0, 100.0)}
+        self.actions.joint_pos = mdp.DelayedJointPositionActionCfg(
+            asset_name="robot", 
+            joint_names=[".*"], 
+            scale=CYBORG_HALF_PED_ACTION_SCALE, 
+            use_default_offset=True, 
+            clip={".*": (-100.0, 100.0)}, 
+            preserve_order=True,
+            delay_steps=(0, 2),
+        )
 
         # ------------------------------Events------------------------------
         self.events.randomize_rigid_body_mass_base.params["asset_cfg"].body_names = [self.base_link_name]
@@ -47,6 +54,7 @@ class CyborgHPRoughEnvCfg(LocomotionVelocityRoughEnvCfg):
         ]
         self.events.randomize_com_positions.params["asset_cfg"].body_names = [self.base_link_name]
         self.events.randomize_apply_external_force_torque.params["asset_cfg"].body_names = [self.base_link_name]
+        self.events.randomize_joint_friction.params["friction_distribution_params"] = (0.8, 1.2)
 
         # ------------------------------Rewards------------------------------
         # General

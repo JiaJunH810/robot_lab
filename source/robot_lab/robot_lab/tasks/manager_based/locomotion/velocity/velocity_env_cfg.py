@@ -354,6 +354,17 @@ class EventCfg:
         },
     )
 
+    randomize_joint_friction = EventTerm(
+        func=mdp.randomize_joint_parameters,
+        mode="reset",
+        params={
+            "asset_cfg": SceneEntityCfg("robot", joint_names=".*"),
+            "friction_distribution_params": (0.0, 0.0),
+            "operation": "scale",
+            "distribution": "uniform",
+        },
+    )
+
     randomize_reset_base = EventTerm(
         func=mdp.reset_root_state_uniform,
         mode="reset",
