@@ -54,7 +54,7 @@ class CyborgHPRoughEnvCfg(LocomotionVelocityRoughEnvCfg):
         ]
         self.events.randomize_com_positions.params["asset_cfg"].body_names = [self.base_link_name]
         self.events.randomize_apply_external_force_torque.params["asset_cfg"].body_names = [self.base_link_name]
-        self.events.randomize_joint_friction.params["friction_distribution_params"] = (0.8, 1.2)
+        self.events.randomize_joint_friction.params["friction_distribution_params"] = (1.0, 1.0)
 
         # ------------------------------Rewards------------------------------
         # General

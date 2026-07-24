@@ -1,27 +1,16 @@
 # Copyright (c) 2024-2026 Ziqi Fan
 # SPDX-License-Identifier: Apache-2.0
 
+from __future__ import annotations
+
 from typing import Sequence
 
 import torch
 
 from isaaclab.envs.mdp.actions.actions_cfg import JointPositionActionCfg
 from isaaclab.envs.mdp.actions.joint_actions import JointPositionAction
+from isaaclab.managers import ActionTerm
 from isaaclab.utils import configclass
-
-
-@configclass
-class DelayedJointPositionActionCfg(JointPositionActionCfg):
-    """Configuration for delayed joint position action term.
-
-    ``delay_steps`` can be a fixed int (e.g. ``1`` for one-step delay) or a
-    tuple ``(min, max)`` for per-environment randomization.  When a range is
-    given, each environment samples its own delay uniformly from the interval
-    on every reset.
-    """
-
-    delay_steps: int | tuple[int, int] = 0
-    """Delay steps.  int → fixed; tuple (min, max) → per-env randomization."""
 
 
 class DelayedJointPositionAction(JointPositionAction):
@@ -48,6 +37,12 @@ class DelayedJointPositionAction(JointPositionAction):
         else:
             self._min_delay = self._max_delay = int(cfg.delay_steps)
             self._delay_per_env = None  # fixed delay for all envs
+
+        if self._min_delay < 0 or self._max_delay < self._min_delay:
+            raise ValueError(
+                f"Invalid delay_steps={cfg.delay_steps!r}. Expected a non-negative integer or an ordered "
+                "(min, max) pair."
+            )
 
         if self._max_delay > 0:
             # FIFO: [oldest, ..., newest], shape (max_delay, num_envs, action_dim)
@@ -97,5 +92,15 @@ class DelayedJointPositionAction(JointPositionAction):
         super().reset(env_ids)
 
 
-# Wire class_type after the action class is defined
-DelayedJointPositionActionCfg.class_type = DelayedJointPositionAction
+@configclass
+class DelayedJointPositionActionCfg(JointPositionActionCfg):
+    """Configuration for delayed joint position actions.
+
+    ``delay_steps`` can be a fixed integer or an inclusive ``(min, max)``
+    range sampled independently for each environment on reset.
+    """
+
+    class_type: type[ActionTerm] = DelayedJointPositionAction
+
+    delay_steps: int | tuple[int, int] = 0
+    """Fixed delay or inclusive per-environment delay range, in policy steps."""

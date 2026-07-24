@@ -79,8 +79,18 @@ CYBORG_HALF_PED_CFG = ArticulationCfg(
             ],
             effort_limit_sim=330.0,
             velocity_limit_sim=12.043,
-            stiffness=STIFFNESS_10020_24,
-            damping=DAMPING_10020_24,
+            stiffness={
+                "J_hip_.*_roll": 250.0,
+                "J_hip_.*_yaw": 120.0,
+                "J_hip_.*_pitch": 300.0,
+                "J_knee_.*_pitch": 300.0,
+            },
+            damping={
+                "J_hip_.*_roll": 10.0,
+                "J_hip_.*_yaw": 10.0,
+                "J_hip_.*_pitch": 10.0,
+                "J_knee_.*_pitch": 10.0,
+            },
             armature=ARMATURE_10020_24,
             friction={
                 "J_hip_l_roll": 2.35,
@@ -109,8 +119,8 @@ CYBORG_HALF_PED_CFG = ArticulationCfg(
             joint_names_expr=["J_ankle_.*_pitch", "J_ankle_.*_roll"],
             effort_limit_sim=120.0,
             velocity_limit_sim=11.205,
-            stiffness=STIFFNESS_6416,
-            damping=DAMPING_6416,
+            stiffness=80.0,
+            damping=3.0,
             armature=ARMATURE_6416,
             friction={
                 "J_ankle_l_pitch": 1.50,
