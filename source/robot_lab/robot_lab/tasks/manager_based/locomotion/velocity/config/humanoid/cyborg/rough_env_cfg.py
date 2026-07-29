@@ -44,7 +44,7 @@ class CyborgHPRoughEnvCfg(LocomotionVelocityRoughEnvCfg):
             use_default_offset=True, 
             clip={".*": (-100.0, 100.0)}, 
             preserve_order=True,
-            delay_steps=(0, 0),
+            delay_steps=(0, 2),
         )
 
         # ------------------------------Events------------------------------
