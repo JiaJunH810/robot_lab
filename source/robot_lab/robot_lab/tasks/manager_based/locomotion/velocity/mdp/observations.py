@@ -27,9 +27,21 @@ def joint_pos_rel_without_wheel(
     return joint_pos_rel
 
 
-def phase(env: ManagerBasedRLEnv, cycle_time: float) -> torch.Tensor:
+def phase(
+    env: ManagerBasedRLEnv,
+    cycle_time: float,
+    command_name: str,
+    command_threshold: float,
+) -> torch.Tensor:
     if not hasattr(env, "episode_length_buf") or env.episode_length_buf is None:
-        env.episode_length_buf = torch.zeros(env.num_envs, device=env.device, dtype=torch.long)
+        env.episode_length_buf = torch.zeros(env.num_envs, device=env.device, dtype=torch.long,)
+
     phase = env.episode_length_buf[:, None] * env.step_dt / cycle_time
-    phase_tensor = torch.cat([torch.sin(2 * torch.pi * phase), torch.cos(2 * torch.pi * phase)], dim=-1)
-    return phase_tensor
+    phase_tensor = torch.cat([torch.sin(2 * torch.pi * phase), torch.cos(2 * torch.pi * phase),],dim=-1)
+    command = env.command_manager.get_command(command_name)
+    moving = (
+        (torch.linalg.norm(command[:, :2], dim=1) > command_threshold)
+        | (torch.abs(command[:, 2]) > command_threshold)
+    )
+
+    return phase_tensor * moving.unsqueeze(-1).to(phase_tensor.dtype)

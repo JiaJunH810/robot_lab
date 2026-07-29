@@ -137,7 +137,11 @@ class ObservationsCfg:
         # observation terms (order preserved)
         phase = ObsTerm(
             func=mdp.phase,
-            params={"cycle_time": 0.9}
+            params={
+                "cycle_time": 0.9,
+                "command_name": "base_velocity",
+                "command_threshold": 0.1,
+            },
         )
         base_lin_vel = ObsTerm(
             func=mdp.base_lin_vel,
@@ -201,7 +205,11 @@ class ObservationsCfg:
         # observation terms (order preserved)
         phase = ObsTerm(
             func=mdp.phase,
-            params={"cycle_time": 0.9}
+            params={
+                "cycle_time": 0.9,
+                "command_name": "base_velocity",
+                "command_threshold": 0.1,
+            },
         )
         base_lin_vel = ObsTerm(
             func=mdp.base_lin_vel,
