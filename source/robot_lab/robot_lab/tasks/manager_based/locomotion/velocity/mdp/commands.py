@@ -39,6 +39,22 @@ class UniformThresholdVelocityCommand(mdp.UniformVelocityCommand):
         super().__init__(cfg, env)
         # Track which robots were on pit terrain in the previous step
         self.was_on_pit = torch.zeros(self.num_envs, dtype=torch.bool, device=self.device)
+        self.smoothed_vel_command_b = torch.zeros_like(self.vel_command_b)
+        self.max_acceleration = torch.tensor(self.cfg.max_acceleration, device=self.device)
+    
+    @property
+    def command(self) -> torch.Tensor:
+        return self.smoothed_vel_command_b
+
+    def _update_metrics(self):
+        max_command_time = self.cfg.resampling_time_range[1]
+        max_command_step = max_command_time / self._env.step_dt
+        self.metrics["error_vel_xy"] += torch.norm(
+            self.smoothed_vel_command_b[:, :2] - self.robot.data.root_lin_vel_b[:, :2], dim=-1
+        ) / max_command_step
+        self.metrics["error_vel_yaw"] += torch.abs(
+            self.smoothed_vel_command_b[:, 2] - self.robot.data.root_ang_vel_b[:, 2]
+        ) / max_command_step
 
     def _resample_command(self, env_ids: Sequence[int]):
         """Resample velocity commands with threshold."""
@@ -84,12 +100,26 @@ class UniformThresholdVelocityCommand(mdp.UniformVelocityCommand):
         # Update tracking state
         self.was_on_pit = on_pits
 
+        max_delta = self.max_acceleration * self._env.step_dt
+        delta = self.vel_command_b - self.smoothed_vel_command_b
+        self.smoothed_vel_command_b += torch.clamp(delta, min=-max_delta, max=max_delta)
+    
+    def reset(self, env_ids=None):
+        if env_ids is None:
+            env_ids = slice(None)
+
+        self.smoothed_vel_command_b[env_ids] = 0.0
+        self.was_on_pit[env_ids] = False
+        return super().reset(env_ids)
+
 
 @configclass
 class UniformThresholdVelocityCommandCfg(mdp.UniformVelocityCommandCfg):
     """Configuration for the uniform threshold velocity command generator."""
 
     class_type: type = UniformThresholdVelocityCommand
+
+    max_acceleration: tuple[float, float, float] = (0.5, 0.5, 1.0)
 
 
 class DiscreteCommandController(CommandTerm):
