@@ -294,7 +294,7 @@ class EventCfg:
         mode="startup",
         params={
             "asset_cfg": SceneEntityCfg("robot", body_names=""),
-            "mass_distribution_params": (-1.0, 3.0),
+            "mass_distribution_params": (-4.0, 4.0),
             "operation": "add",
             "recompute_inertia": True,
         },
@@ -327,7 +327,7 @@ class EventCfg:
         mode="startup",
         params={
             "asset_cfg": SceneEntityCfg("robot", body_names=".*"),
-            "com_range": {"x": (-0.05, 0.05), "y": (-0.05, 0.05), "z": (-0.05, 0.05)},
+            "com_range": {"x": (-0.06, 0.06), "y": (-0.06, 0.06), "z": (-0.06, 0.06)},
         },
     )
 
@@ -347,7 +347,7 @@ class EventCfg:
         # func=mdp.reset_joints_by_offset,
         mode="reset",
         params={
-            "position_range": (1.0, 1.0),
+            "position_range": (-0.1, 0.1),
             "velocity_range": (0.0, 0.0),
         },
     )
@@ -357,8 +357,8 @@ class EventCfg:
         mode="reset",
         params={
             "asset_cfg": SceneEntityCfg("robot", joint_names=".*"),
-            "stiffness_distribution_params": (0.5, 2.0),
-            "damping_distribution_params": (0.5, 2.0),
+            "stiffness_distribution_params": (0.8, 1.2),
+            "damping_distribution_params": (0.8, 1.2),
             "operation": "scale",
             "distribution": "uniform",
         },
@@ -369,7 +369,7 @@ class EventCfg:
         mode="reset",
         params={
             "asset_cfg": SceneEntityCfg("robot", joint_names=".*"),
-            "friction_distribution_params": (0.0, 0.0),
+            "friction_distribution_params": (0.8, 1.2),
             "operation": "scale",
             "distribution": "uniform",
         },
@@ -396,7 +396,35 @@ class EventCfg:
         func=mdp.push_by_setting_velocity,
         mode="interval",
         interval_range_s=(10.0, 15.0),
-        params={"velocity_range": {"x": (-0.5, 0.5), "y": (-0.5, 0.5)}},
+        params={
+            "velocity_range": {
+                "x": (-0.5, 0.5), 
+                "y": (-0.5, 0.5), 
+                "roll": (-0.6, 0.6),
+                "pitch": (-0.6, 0.6),
+                "yaw": (-0.6, 0.6),
+            }
+        },
+    )
+
+    randomize_motor_zero_offset = EventTerm(
+        func=mdp.randomize_motor_zero_offset,
+        mode="reset",
+        params={
+            "action_name": "joint_pos",
+            "offset_range": (-0.035, 0.035),
+        },
+    )
+
+    randomize_joint_armature = EventTerm(
+        func=mdp.randomize_joint_parameters,
+        mode="reset",
+        params={
+            "asset_cfg": SceneEntityCfg("robot", joint_names=".*"),
+            "armature_distribution_params": (0.8, 1.2),
+            "operation": "scale",
+            "distribution": "uniform",
+        },
     )
 
 
@@ -772,10 +800,10 @@ class LocomotionVelocityRoughEnvCfg(ManagerBasedRLEnvCfg):
     def __post_init__(self):
         """Post initialization."""
         # general settings
-        self.decimation = 4
+        self.decimation = 10
         self.episode_length_s = 20.0
         # simulation settings
-        self.sim.dt = 0.005
+        self.sim.dt = 0.001
         self.sim.render_interval = self.decimation
         self.sim.physics_material = self.scene.terrain.physics_material
         self.sim.physx.gpu_max_rigid_patch_count = 10 * 2**15

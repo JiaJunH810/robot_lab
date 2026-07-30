@@ -269,3 +269,24 @@ def reset_root_state_uniform(
         # set into the physics simulation
         asset.write_root_pose_to_sim(torch.cat([positions, orientations], dim=-1), env_ids=non_pit_env_ids)
         asset.write_root_velocity_to_sim(velocities, env_ids=non_pit_env_ids)
+
+def randomize_motor_zero_offset(
+    env: ManagerBasedEnv,
+    env_ids: torch.Tensor | None,
+    action_name: str,
+    offset_range: tuple[float, float],
+):
+    action_term = env.action_manager.get_term(action_name)
+    if not hasattr(action_term, "_nominal_motor_offset"):
+        action_term._nominal_motor_offset = action_term._offset.clone()
+    if env_ids is None:
+        env_ids = torch.arange(env.num_envs, device=env.device)
+    offset = math_utils.sample_uniform(
+        offset_range[0],
+        offset_range[1],
+        action_term._offset[env_ids].shape,
+        device=env.device,
+    )
+    action_term._offset[env_ids] = (
+        action_term._nominal_motor_offset[env_ids] + offset
+    )
