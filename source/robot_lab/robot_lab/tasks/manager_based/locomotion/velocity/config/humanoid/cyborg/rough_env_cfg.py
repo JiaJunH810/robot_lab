@@ -82,7 +82,9 @@ class CyborgHPRoughEnvCfg(LocomotionVelocityRoughEnvCfg):
         self.rewards.joint_vel_limits.weight = 0
         self.rewards.joint_power.weight = 0
         self.rewards.stand_still.weight = -1.0
+        self.rewards.stand_still.params["recovery_tilt_threshold"] = 0.17
         self.rewards.joint_pos_penalty.weight = -0.5
+        self.rewards.joint_pos_penalty.params["recovery_tilt_threshold"] = 0.17
         self.rewards.joint_mirror.weight = 0
         self.rewards.joint_mirror.params["mirror_joints"] = [["J_.*_l_.*", "J_.*_r_.*"]]
 
@@ -127,9 +129,11 @@ class CyborgHPRoughEnvCfg(LocomotionVelocityRoughEnvCfg):
         self.rewards.feet_height_body.params["asset_cfg"].body_names = [self.foot_link_name]
         self.rewards.upward.weight = 1.0
         self.rewards.periodic_contact_mismatch.weight = -2.0
+        self.rewards.periodic_contact_mismatch.params["recovery_tilt_threshold"] = 0.17
         self.rewards.periodic_contact_mismatch.params["sensor_cfg"].body_names = ["ankle_l_roll_link", "ankle_r_roll_link"]
         self.rewards.periodic_contact_mismatch.params["sensor_cfg"].preserve_order = True
         self.rewards.phase_feet_height.weight = -0.5
+        self.rewards.phase_feet_height.params["recovery_tilt_threshold"] = 0.17
         self.rewards.phase_feet_height.params["asset_cfg"].body_names = ["ankle_l_roll_link", "ankle_r_roll_link",]
         self.rewards.phase_feet_height.params["asset_cfg"].preserve_order = True
 

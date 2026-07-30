@@ -90,16 +90,33 @@ def joint_power(env: ManagerBasedRLEnv, asset_cfg: SceneEntityCfg = SceneEntityC
     return reward
 
 
+def _phase_active(
+    env: ManagerBasedRLEnv,
+    command_name: str,
+    command_threshold: float,
+    recovery_tilt_threshold: float | None,
+) -> torch.Tensor:
+    command = env.command_manager.get_command(command_name)
+    moving = (torch.linalg.norm(command[:, :2], dim=1) > command_threshold) | (
+        torch.abs(command[:, 2]) > command_threshold
+    )
+    if recovery_tilt_threshold is None:
+        return moving
+    tilt = torch.linalg.norm(env.scene["robot"].data.projected_gravity_b[:, :2], dim=1)
+    return moving | (tilt > recovery_tilt_threshold)
+
+
 def stand_still(
     env: ManagerBasedRLEnv,
     command_name: str,
     command_threshold: float = 0.06,
     asset_cfg: SceneEntityCfg = SceneEntityCfg("robot"),
+    recovery_tilt_threshold: float | None = None,
 ) -> torch.Tensor:
     """Penalize offsets from the default joint positions when the command is very small."""
     # Penalize motion when command is nearly zero.
     reward = mdp.joint_deviation_l1(env, asset_cfg)
-    reward *= torch.norm(env.command_manager.get_command(command_name), dim=1) < command_threshold
+    reward *= ~_phase_active(env, command_name, command_threshold, recovery_tilt_threshold)
     reward *= torch.clamp(-env.scene["robot"].data.projected_gravity_b[:, 2], 0, 0.7) / 0.7
     return reward
 
@@ -111,17 +128,18 @@ def joint_pos_penalty(
     stand_still_scale: float,
     velocity_threshold: float,
     command_threshold: float,
+    recovery_tilt_threshold: float | None = None,
 ) -> torch.Tensor:
     """Penalize joint position error from default on the articulation."""
     # extract the used quantities (to enable type-hinting)
     asset: Articulation = env.scene[asset_cfg.name]
-    cmd = torch.linalg.norm(env.command_manager.get_command(command_name), dim=1)
     body_vel = torch.linalg.norm(asset.data.root_lin_vel_b[:, :2], dim=1)
+    phase_active = _phase_active(env, command_name, command_threshold, recovery_tilt_threshold)
     running_reward = torch.linalg.norm(
         (asset.data.joint_pos[:, asset_cfg.joint_ids] - asset.data.default_joint_pos[:, asset_cfg.joint_ids]), dim=1
     )
     reward = torch.where(
-        torch.logical_or(cmd > command_threshold, body_vel > velocity_threshold),
+        phase_active | (body_vel > velocity_threshold),
         running_reward,
         stand_still_scale * running_reward,
     )
@@ -134,7 +152,9 @@ def periodic_biped_contact_mismatch(
     command_name: str, 
     cycle_time: float, 
     force_threshold: float,
-    sensor_cfg: SceneEntityCfg
+    sensor_cfg: SceneEntityCfg,
+    command_threshold: float = 0.1,
+    recovery_tilt_threshold: float | None = None,
 ) -> torch.Tensor:
     contact_sensor: ContactSensor = env.scene.sensors[sensor_cfg.name]
     phase = (env.episode_length_buf.float() * env.step_dt / cycle_time)
@@ -154,11 +174,10 @@ def periodic_biped_contact_mismatch(
     right_should_contact = ((phase < 0.05)| (phase >= 0.45))
     desired_contact = torch.stack([left_should_contact,right_should_contact],dim=1).float()
 
-    command = env.command_manager.get_command(command_name)
-    moving = ((torch.linalg.norm(command[:, :2], dim=1) > 0.1) | (torch.abs(command[:, 2]) > 0.1))
+    phase_active = _phase_active(env, command_name, command_threshold, recovery_tilt_threshold)
     # 静止时不执行周期踏步，要求双脚接触
     desired_contact = torch.where(
-        moving.unsqueeze(1),
+        phase_active.unsqueeze(1),
         desired_contact,
         torch.ones_like(desired_contact),
     )
@@ -600,6 +619,7 @@ def phase_feet_height(
     cycle_time: float,
     peak_clearance: float,
     command_threshold: float,
+    recovery_tilt_threshold: float | None = None,
 ) -> torch.Tensor:
     """Penalize deviation from a single-peaked relative swing-foot trajectory.
 
@@ -630,9 +650,8 @@ def phase_feet_height(
     penalty = (left_error * left_swing.float() + right_error * right_swing.float())
     # Avoid excessive reward magnitude when the robot falls.
     penalty = torch.clamp(penalty, max=4.0)
-    command = env.command_manager.get_command(command_name)
-    moving = ((torch.linalg.norm(command[:, :2], dim=1) > command_threshold) | (torch.abs(command[:, 2]) > command_threshold))
-    return penalty * moving.float()
+    phase_active = _phase_active(env, command_name, command_threshold, recovery_tilt_threshold)
+    return penalty * phase_active.float()
 
 def feet_slide(
     env: ManagerBasedRLEnv, sensor_cfg: SceneEntityCfg, asset_cfg: SceneEntityCfg = SceneEntityCfg("robot")

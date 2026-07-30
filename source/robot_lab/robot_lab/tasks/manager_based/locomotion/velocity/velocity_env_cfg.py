@@ -141,6 +141,7 @@ class ObservationsCfg:
                 "cycle_time": 0.9,
                 "command_name": "base_velocity",
                 "command_threshold": 0.1,
+                "recovery_tilt_threshold": 0.17,
             },
         )
         base_lin_vel = ObsTerm(
@@ -209,6 +210,7 @@ class ObservationsCfg:
                 "cycle_time": 0.9,
                 "command_name": "base_velocity",
                 "command_threshold": 0.1,
+                "recovery_tilt_threshold": 0.17,
             },
         )
         base_lin_vel = ObsTerm(

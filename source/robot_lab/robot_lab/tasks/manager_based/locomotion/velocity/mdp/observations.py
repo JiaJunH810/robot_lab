@@ -32,6 +32,7 @@ def phase(
     cycle_time: float,
     command_name: str,
     command_threshold: float,
+    recovery_tilt_threshold: float,
 ) -> torch.Tensor:
     if not hasattr(env, "episode_length_buf") or env.episode_length_buf is None:
         env.episode_length_buf = torch.zeros(env.num_envs, device=env.device, dtype=torch.long,)
@@ -44,4 +45,8 @@ def phase(
         | (torch.abs(command[:, 2]) > command_threshold)
     )
 
-    return phase_tensor * moving.unsqueeze(-1).to(phase_tensor.dtype)
+    tilt = torch.linalg.norm(env.scene["robot"].data.projected_gravity_b[:, :2], dim=1)
+    recovering = tilt > recovery_tilt_threshold
+    phase_active = moving | recovering
+
+    return phase_tensor * phase_active.unsqueeze(-1).to(phase_tensor.dtype)
