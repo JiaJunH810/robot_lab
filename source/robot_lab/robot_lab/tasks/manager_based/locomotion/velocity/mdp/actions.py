@@ -14,29 +14,17 @@ from isaaclab.utils import configclass
 
 
 class DelayedJointPositionAction(JointPositionAction):
-    """Joint position action with configurable per-environment delay.
-
-    Policy outputs are buffered in a FIFO.  On each ``process_actions()`` call
-    the oldest buffered action is popped, the incoming action is pushed, and
-    the popped action is applied to the simulation.
-
-    With ``delay_steps=(1, 2)`` the policy is exposed to a mix of 1-step and
-    2-step latencies, making it robust to real-world jitter.
-    """
+    """Joint position action with per-environment delay in physics steps."""
 
     cfg: DelayedJointPositionActionCfg
 
     def __init__(self, cfg: DelayedJointPositionActionCfg, env):
         super().__init__(cfg, env)
-        # Normalize config to (min, max) + per-env tensor
+
         if isinstance(cfg.delay_steps, (list, tuple)):
             self._min_delay, self._max_delay = int(cfg.delay_steps[0]), int(cfg.delay_steps[1])
-            self._delay_per_env = torch.randint(
-                self._min_delay, self._max_delay + 1, (self.num_envs,), device=self.device
-            )
         else:
             self._min_delay = self._max_delay = int(cfg.delay_steps)
-            self._delay_per_env = None  # fixed delay for all envs
 
         if self._min_delay < 0 or self._max_delay < self._min_delay:
             raise ValueError(
@@ -44,51 +32,47 @@ class DelayedJointPositionAction(JointPositionAction):
                 "(min, max) pair."
             )
 
-        if self._max_delay > 0:
-            # FIFO: [oldest, ..., newest], shape (max_delay, num_envs, action_dim)
-            self._action_buffer = torch.zeros(
-                self._max_delay, self.num_envs, self.action_dim, device=self.device
-            )
+        self._env_ids = torch.arange(self.num_envs, device=self.device, dtype=torch.long)
+        self._delay_per_env = torch.randint(
+            self._min_delay, self._max_delay + 1, (self.num_envs,), device=self.device
+        )
+
+        # Index zero is the newest raw action; index d is d physics steps old.
+        self._action_buffer = torch.zeros(
+            self._max_delay + 1, self.num_envs, self.action_dim, device=self.device
+        )
 
     def process_actions(self, actions: torch.Tensor):
-        if self._max_delay == 0:
-            super().process_actions(actions)
-            return
+        # Called once per policy step. The latest raw action is held between calls.
+        super().process_actions(actions)
 
-        # --- select delayed action per environment ---
-        if self._delay_per_env is not None:
-            delayed = torch.zeros_like(actions)
-            for d in range(self._min_delay, self._max_delay + 1):
-                mask = (self._delay_per_env == d)
-                if mask.any():
-                    if d == 0:
-                        delayed[mask] = actions[mask]
-                    else:
-                        # buffer[max_delay - d] → action from d steps ago
-                        delayed[mask] = self._action_buffer[self._max_delay - d, mask]
-        else:
-            # fixed delay: pop the oldest entry (same as before)
-            d = self._max_delay
-            delayed = self._action_buffer[self._max_delay - d].clone()
+    def apply_actions(self):
+        # Called once per physics step, so one buffer index equals sim.dt.
+        if self._max_delay > 0:
+            self._action_buffer[1:] = self._action_buffer[:-1].clone()
+        self._action_buffer[0] = self._raw_actions
 
-        # --- FIFO shift: drop oldest, append new ---
-        if self._max_delay > 1:
-            self._action_buffer[:-1] = self._action_buffer[1:].clone()
-        self._action_buffer[-1] = actions
+        delayed_raw_actions = self._action_buffer[self._delay_per_env, self._env_ids]
+        delayed_targets = delayed_raw_actions * self._scale + self._offset
+        if self.cfg.clip is not None:
+            delayed_targets = torch.clamp(
+                delayed_targets, min=self._clip[:, :, 0], max=self._clip[:, :, 1]
+            )
 
-        # apply delayed action (scale / offset / clip via parent)
-        super().process_actions(delayed)
+        self._asset.set_joint_position_target(delayed_targets, joint_ids=self._joint_ids)
 
     def reset(self, env_ids: Sequence[int] | None = None):
         if env_ids is None:
-            env_ids = slice(None)
-        if self._max_delay > 0:
-            self._action_buffer[:, env_ids] = 0.0
-            if self._delay_per_env is not None:
-                n = self.num_envs if isinstance(env_ids, slice) else len(env_ids)
-                self._delay_per_env[env_ids] = torch.randint(
-                    self._min_delay, self._max_delay + 1, (n,), device=self.device
-                )
+            env_ids = self._env_ids
+        elif isinstance(env_ids, slice):
+            env_ids = self._env_ids[env_ids]
+        else:
+            env_ids = torch.as_tensor(env_ids, device=self.device, dtype=torch.long)
+
+        self._action_buffer[:, env_ids] = 0.0
+        self._delay_per_env[env_ids] = torch.randint(
+            self._min_delay, self._max_delay + 1, (len(env_ids),), device=self.device
+        )
         super().reset(env_ids)
 
 
@@ -97,10 +81,10 @@ class DelayedJointPositionActionCfg(JointPositionActionCfg):
     """Configuration for delayed joint position actions.
 
     ``delay_steps`` can be a fixed integer or an inclusive ``(min, max)``
-    range sampled independently for each environment on reset.
+    range in physics steps, sampled independently for each environment on reset.
     """
 
     class_type: type[ActionTerm] = DelayedJointPositionAction
 
     delay_steps: int | tuple[int, int] = 0
-    """Fixed delay or inclusive per-environment delay range, in policy steps."""
+    """Fixed delay or inclusive per-environment delay range, in physics steps."""
