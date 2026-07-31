@@ -79,8 +79,18 @@ CYBORG_HALF_PED_CFG = ArticulationCfg(
             ],
             effort_limit_sim=330.0,
             velocity_limit_sim=12.043,
-            stiffness=STIFFNESS_10020_24,
-            damping=DAMPING_10020_24,
+            stiffness={
+                "J_hip_.*_roll": 250.0,
+                "J_hip_.*_yaw": 120.0,
+                "J_hip_.*_pitch": 300.0,
+                "J_knee_.*_pitch": 300.0,
+            },
+            damping={
+                "J_hip_.*_roll": 10.0,
+                "J_hip_.*_yaw": 10.0,
+                "J_hip_.*_pitch": 10.0,
+                "J_knee_.*_pitch": 10.0,
+            },
             armature=ARMATURE_10020_24,
             friction={
                 "J_hip_l_roll": 2.35,
@@ -109,8 +119,14 @@ CYBORG_HALF_PED_CFG = ArticulationCfg(
             joint_names_expr=["J_ankle_.*_pitch", "J_ankle_.*_roll"],
             effort_limit_sim=120.0,
             velocity_limit_sim=11.205,
-            stiffness=STIFFNESS_6416,
-            damping=DAMPING_6416,
+            stiffness={
+                "J_ankle_.*_pitch": 80.0,
+                "J_ankle_.*_roll": 80.0,
+            },
+            damping={
+                "J_ankle_.*_pitch": 3.0,
+                "J_ankle_.*_roll": 3.0,
+            },
             armature=ARMATURE_6416,
             friction={
                 "J_ankle_l_pitch": 1.50,
@@ -129,15 +145,12 @@ CYBORG_HALF_PED_CFG = ArticulationCfg(
     },
 )
 
-CYBORG_HALF_PED_ACTION_SCALE = {}
-for a in CYBORG_HALF_PED_CFG.actuators.values():
-    e = a.effort_limit_sim
-    s = a.stiffness
-    names = a.joint_names_expr
-    if not isinstance(e, dict):
-        e = {n: e for n in names}
-    if not isinstance(s, dict):
-        s = {n: s for n in names}
-    for n in names:
-        if n in e and n in s and s[n]:
-            CYBORG_HALF_PED_ACTION_SCALE[n] = 0.25 * e[n] / s[n]
+# Encos 当前部署中髋 roll 使用 0.4，其余腿部关节使用 0.35。
+CYBORG_HALF_PED_ACTION_SCALE = {
+    "J_hip_.*_roll": 0.4,
+    "J_hip_.*_yaw": 0.35,
+    "J_hip_.*_pitch": 0.35,
+    "J_knee_.*_pitch": 0.35,
+    "J_ankle_.*_pitch": 0.35,
+    "J_ankle_.*_roll": 0.35,
+}
