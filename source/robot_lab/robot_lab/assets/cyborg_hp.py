@@ -79,18 +79,8 @@ CYBORG_HALF_PED_CFG = ArticulationCfg(
             ],
             effort_limit_sim=330.0,
             velocity_limit_sim=12.043,
-            stiffness={
-                "J_hip_.*_roll": 250.0,
-                "J_hip_.*_yaw": 120.0,
-                "J_hip_.*_pitch": 300.0,
-                "J_knee_.*_pitch": 300.0,
-            },
-            damping={
-                "J_hip_.*_roll": 10.0,
-                "J_hip_.*_yaw": 10.0,
-                "J_hip_.*_pitch": 10.0,
-                "J_knee_.*_pitch": 10.0,
-            },
+            stiffness=STIFFNESS_10020_24,
+            damping=DAMPING_10020_24,
             armature=ARMATURE_10020_24,
             friction={
                 "J_hip_l_roll": 2.35,
@@ -112,21 +102,20 @@ CYBORG_HALF_PED_CFG = ArticulationCfg(
                 "J_knee_l_pitch": 1.60,
                 "J_knee_r_pitch": 2.32,
             },
-            viscous_friction=1.5,
+            viscous_friction={
+                "J_hip_.*_roll": 15.0,
+                "J_hip_.*_yaw": 5.0,
+                "J_hip_.*_pitch": 5.0,
+                "J_knee_.*_pitch": 15.0,
+            },
         ),
         # 踝: EC-A6416-P2-25 (ratio 25)
         "feet": ImplicitActuatorCfg(
             joint_names_expr=["J_ankle_.*_pitch", "J_ankle_.*_roll"],
             effort_limit_sim=120.0,
             velocity_limit_sim=11.205,
-            stiffness={
-                "J_ankle_.*_pitch": 80.0,
-                "J_ankle_.*_roll": 80.0,
-            },
-            damping={
-                "J_ankle_.*_pitch": 3.0,
-                "J_ankle_.*_roll": 3.0,
-            },
+            stiffness=STIFFNESS_6416,
+            damping=DAMPING_6416,
             armature=ARMATURE_6416,
             friction={
                 "J_ankle_l_pitch": 1.50,
@@ -140,17 +129,20 @@ CYBORG_HALF_PED_CFG = ArticulationCfg(
                 "J_ankle_l_roll": 0.36,
                 "J_ankle_r_roll": 0.40,
             },
-            viscous_friction=1.5,
+            viscous_friction=15.0,
         ),
     },
 )
 
-# Encos 当前部署中髋 roll 使用 0.4，其余腿部关节使用 0.35。
-CYBORG_HALF_PED_ACTION_SCALE = {
-    "J_hip_.*_roll": 0.4,
-    "J_hip_.*_yaw": 0.35,
-    "J_hip_.*_pitch": 0.35,
-    "J_knee_.*_pitch": 0.35,
-    "J_ankle_.*_pitch": 0.35,
-    "J_ankle_.*_roll": 0.35,
-}
+CYBORG_HALF_PED_ACTION_SCALE = {}
+for actuator in CYBORG_HALF_PED_CFG.actuators.values():
+    effort_limit = actuator.effort_limit_sim
+    stiffness = actuator.stiffness
+    joint_names = actuator.joint_names_expr
+    if not isinstance(effort_limit, dict):
+        effort_limit = {name: effort_limit for name in joint_names}
+    if not isinstance(stiffness, dict):
+        stiffness = {name: stiffness for name in joint_names}
+    for name in joint_names:
+        if name in effort_limit and name in stiffness and stiffness[name]:
+            CYBORG_HALF_PED_ACTION_SCALE[name] = 0.25 * effort_limit[name] / stiffness[name]
