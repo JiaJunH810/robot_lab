@@ -44,7 +44,7 @@ class CyborgHPRoughEnvCfg(LocomotionVelocityRoughEnvCfg):
             use_default_offset=True, 
             clip={".*": (-100.0, 100.0)}, 
             preserve_order=True,
-            delay_steps=(1, 15),
+            delay_steps=(1, 20),
         )
 
         # ------------------------------Events------------------------------
@@ -52,7 +52,6 @@ class CyborgHPRoughEnvCfg(LocomotionVelocityRoughEnvCfg):
         self.events.randomize_rigid_body_mass_others.params["asset_cfg"].body_names = [
             f"^(?!.*{self.base_link_name}).*"
         ]
-        self.events.randomize_com_positions.params["asset_cfg"].body_names = [self.base_link_name]
         self.events.randomize_apply_external_force_torque.params["asset_cfg"].body_names = [self.base_link_name]
 
         # ------------------------------Rewards------------------------------
