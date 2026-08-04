@@ -102,12 +102,6 @@ CYBORG_HALF_PED_CFG = ArticulationCfg(
                 "J_knee_l_pitch": 1.60,
                 "J_knee_r_pitch": 2.32,
             },
-            viscous_friction={
-                "J_hip_.*_roll": 15.0,
-                "J_hip_.*_yaw": 5.0,
-                "J_hip_.*_pitch": 5.0,
-                "J_knee_.*_pitch": 15.0,
-            },
         ),
         # 踝: EC-A6416-P2-25 (ratio 25)
         "feet": ImplicitActuatorCfg(
@@ -129,7 +123,6 @@ CYBORG_HALF_PED_CFG = ArticulationCfg(
                 "J_ankle_l_roll": 0.36,
                 "J_ankle_r_roll": 0.40,
             },
-            viscous_friction=15.0,
         ),
     },
 )

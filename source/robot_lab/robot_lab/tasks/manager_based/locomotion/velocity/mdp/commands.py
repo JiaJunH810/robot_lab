@@ -119,7 +119,7 @@ class UniformThresholdVelocityCommandCfg(mdp.UniformVelocityCommandCfg):
 
     class_type: type = UniformThresholdVelocityCommand
 
-    max_acceleration: tuple[float, float, float] = (0.5, 0.5, 1.0)
+    max_acceleration: tuple[float, float, float] = (0.2, 0.2, 0.2)
 
 
 class DiscreteCommandController(CommandTerm):

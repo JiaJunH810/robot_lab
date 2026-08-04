@@ -8,6 +8,7 @@ If no joystick detected, falls back to uniform random commands.
 import math
 import os
 import struct
+
 import numpy as np
 import onnx
 import onnxruntime
@@ -36,10 +37,15 @@ def projected_gravity(quat_wxyz):
 
 class LocoSim2Sim:
     def __init__(self, xml_path, policy_path, history_length=15,
-                 cmd_max=(0.5, 0.5, 0.5), cycle_time=0.9):
+                 cmd_max=(0.5, 0.5, 0.5), cycle_time=0.9,
+                 command_threshold=0.1, recovery_tilt_threshold=0.17,
+                 max_acceleration=(0.2, 0.2, 0.2)):
         self.history_length = history_length
         self.cmd_max = cmd_max  # (vx_max, vy_max, wz_max)
         self.cycle_time = cycle_time
+        self.command_threshold = command_threshold
+        self.recovery_tilt_threshold = recovery_tilt_threshold
+        self.max_acceleration = np.asarray(max_acceleration, dtype=np.float32)
 
         self.m = mujoco.MjModel.from_xml_path(xml_path)
         self.m.opt.timestep = 0.001
@@ -81,8 +87,8 @@ class LocoSim2Sim:
 
         self.action_buffer = np.zeros(self.num_action, dtype=np.float32)
         self.vel_cmd = np.array([0.0, 0.0, 0.0], dtype=np.float32)
+        self.target_vel_cmd = np.zeros(3, dtype=np.float32)
         self.cmd_resample_timer = 0
-        self.cmd_resample_interval = int(10.0 / 0.02)
 
         # ---- Joystick ----
         self._js_fd = self._open_js_device()
@@ -185,8 +191,10 @@ class LocoSim2Sim:
     # =========================================================================
     def run(self, sim_duration=120.0):
         sim_dt = 0.001
-        sim_decimation = 20
+        sim_decimation = 10
         total_steps = int(sim_duration / sim_dt)
+        policy_dt = sim_dt * sim_decimation
+        self.cmd_resample_interval = int(10.0 / policy_dt)
 
         self.d.qpos[-self.num_action:] = self.lab_default_joint_pos[self.lab_to_xml]
         self.d.qvel[-self.num_action:] = 0.0
@@ -197,8 +205,10 @@ class LocoSim2Sim:
             qj = self.d.qpos.astype(np.float32)[-self.num_action:]
             qvj = self.d.qvel.astype(np.float32)[-self.num_action:]
             tgt = self.lab_default_joint_pos[self.lab_to_xml]
-            trq = pd_control(tgt, qj, self.lab_joint_stiffness[self.lab_to_xml],
-                             np.zeros(self.num_action), qvj, self.lab_joint_damping[self.lab_to_xml])
+            trq = pd_control(
+                tgt, qj, self.lab_joint_stiffness[self.lab_to_xml],
+                np.zeros(self.num_action), qvj, self.lab_joint_damping[self.lab_to_xml],
+            )
             self.d.ctrl = trq
             mujoco.mj_step(self.m, self.d)
 
@@ -221,30 +231,44 @@ class LocoSim2Sim:
 
                 # ---- Velocity command: joystick or uniform random ----
                 if self._js_fd is not None:
-                    self.vel_cmd = self._get_joystick_cmd()
-                    if np.linalg.norm(self.vel_cmd[:2]) < 0.2:
-                        self.vel_cmd[:2] = 0.0
+                    self.target_vel_cmd = self._get_joystick_cmd()
+                    if np.linalg.norm(self.target_vel_cmd[:2]) < 0.1:
+                        self.target_vel_cmd[:2] = 0.0
                 else:
                     self.cmd_resample_timer += 1
                     if self.cmd_resample_timer >= self.cmd_resample_interval:
-                        self.vel_cmd = np.array([
+                        self.target_vel_cmd = np.array([
                             np.random.uniform(-self.cmd_max[0], self.cmd_max[0]),
                             np.random.uniform(-self.cmd_max[1], self.cmd_max[1]),
                             np.random.uniform(-self.cmd_max[2], self.cmd_max[2]),
                         ], dtype=np.float32)
-                        if np.linalg.norm(self.vel_cmd[:2]) < 0.2:
-                            self.vel_cmd[:2] = 0.0
+                        if np.linalg.norm(self.target_vel_cmd[:2]) < 0.1:
+                            self.target_vel_cmd[:2] = 0.0
                         self.cmd_resample_timer = 0
 
+                max_delta = self.max_acceleration * policy_dt
+                self.vel_cmd += np.clip(
+                    self.target_vel_cmd - self.vel_cmd,
+                    -max_delta,
+                    max_delta,
+                )
 
                 xml_joint_pos = self.d.qpos.astype(np.float32)[-self.num_action:]
                 xml_joint_vel = self.d.qvel.astype(np.float32)[-self.num_action:]
-                root_quat = self.d.qpos.astype(np.float32)[3:7].copy()
+                root_quat = self.d.sensor("orientation").data.astype(np.float32)
 
                 # MuJoCo qvel[3:6] is already body-frame angular velocity
-                base_ang_vel_body = self.d.qvel.astype(np.float32)[3:6]
+                base_ang_vel_body = self.d.sensor("angular-velocity").data.astype(np.float32)
 
                 proj_grav = projected_gravity(root_quat)
+                moving = (
+                    np.linalg.norm(self.vel_cmd[:2]) > self.command_threshold
+                    or abs(self.vel_cmd[2]) > self.command_threshold
+                )
+                recovering = np.linalg.norm(proj_grav[:2]) > self.recovery_tilt_threshold
+                if not (moving or recovering):
+                    phase_obs.fill(0.0)
+
                 joint_pos_rel = xml_joint_pos[self.xml_to_lab] - self.lab_default_joint_pos
                 joint_vel_rel = xml_joint_vel[self.xml_to_lab]
 
@@ -322,9 +346,13 @@ class LocoSim2Sim:
 
 
 if __name__ == "__main__":
-    xml_path = "/home/cyborg/Desktop/projects/robot_lab/source/sim2sim/assets/temp/biped_temp_1_0_fixed.xml"
-    policy_path = "/home/cyborg/Desktop/projects/robot_lab/logs/rsl_rl/cyborg_hp_flat/2026-07-17_16-39-34/exported/policy.onnx"
+    xml_path = "/home/cyborg/Desktop/projects/robot_lab/source/sim2real/assets/temp/biped_temp_1_0_fixed.xml"
+    policy_path = "/home/cyborg/Desktop/projects/robot_lab/logs/rsl_rl/cyborg_hp_flat/2026-07-30_18-16-03/exported/policy.onnx"
 
-    sim = LocoSim2Sim(xml_path, policy_path, history_length=15,
-                      cmd_max=(0.0, 0.0, 0.0))
+    sim = LocoSim2Sim(
+        xml_path,
+        policy_path,
+        history_length=15,
+        cmd_max=(0.6, 0.4, 0.6),
+    )
     sim.run(sim_duration=120.0)
