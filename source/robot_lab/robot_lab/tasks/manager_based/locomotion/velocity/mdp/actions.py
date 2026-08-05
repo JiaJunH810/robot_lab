@@ -66,6 +66,7 @@ class DelayedJointPositionAction(JointPositionAction):
             self.cfg.joint_obs_delay_steps[1] + 1,
             (len(env_ids),),
             device=self.device,
+            dtype=torch.int,
         )
 
         imu_delay = torch.randint(
@@ -73,6 +74,7 @@ class DelayedJointPositionAction(JointPositionAction):
             self.cfg.imu_obs_delay_steps[1] + 1,
             (len(env_ids),),
             device=self.device,
+            dtype=torch.int,
         )
 
         # Sensor values are sampled before the next physics step,
