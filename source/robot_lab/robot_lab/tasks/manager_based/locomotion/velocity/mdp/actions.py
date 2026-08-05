@@ -10,7 +10,7 @@ import torch
 from isaaclab.envs.mdp.actions.actions_cfg import JointPositionActionCfg
 from isaaclab.envs.mdp.actions.joint_actions import JointPositionAction
 from isaaclab.managers import ActionTerm
-from isaaclab.utils import configclass
+from isaaclab.utils import configclass, DelayBuffer
 
 
 class DelayedJointPositionAction(JointPositionAction):
@@ -41,12 +41,73 @@ class DelayedJointPositionAction(JointPositionAction):
         self._action_buffer = torch.zeros(
             self._max_delay + 1, self.num_envs, self.action_dim, device=self.device
         )
+        self._joint_obs_buffer = DelayBuffer(cfg.joint_obs_delay_steps[1], self.num_envs, self.device)
+        self._imu_obs_buffer = DelayBuffer(cfg.imu_obs_delay_steps[1], self.num_envs, self.device)
+        self._delayed_joint_obs = torch.zeros(self.num_envs, 2 * self.action_dim, device=self.device)
+        self._delayed_imu_obs = torch.zeros(self.num_envs, 6, device=self.device)
 
+        self._resample_obs_delay(self._env_ids)
+
+    @property
+    def delayed_joint_obs(self) -> torch.Tensor:
+        return self._delayed_joint_obs
+
+    @property
+    def delayed_imu_obs(self) -> torch.Tensor:
+        return self._delayed_imu_obs
+    
     def process_actions(self, actions: torch.Tensor):
         # Called once per policy step. The latest raw action is held between calls.
         super().process_actions(actions)
 
+    def _resample_obs_delay(self, env_ids: torch.Tensor):
+        joint_delay = torch.randint(
+            self.cfg.joint_obs_delay_steps[0],
+            self.cfg.joint_obs_delay_steps[1] + 1,
+            (len(env_ids),),
+            device=self.device,
+        )
+
+        imu_delay = torch.randint(
+            self.cfg.imu_obs_delay_steps[0],
+            self.cfg.imu_obs_delay_steps[1] + 1,
+            (len(env_ids),),
+            device=self.device,
+        )
+
+        # Sensor values are sampled before the next physics step,
+        # so lag=0 already corresponds to approximately 1 ms.
+        joint_lag = torch.clamp(joint_delay - 1, min=0)
+        imu_lag = torch.clamp(imu_delay - 1, min=0)
+
+        self._joint_obs_buffer.set_time_lag(joint_lag, env_ids)
+        self._imu_obs_buffer.set_time_lag(imu_lag, env_ids)
+
+    def _get_sensor_obs(self):
+        joint_obs = torch.cat(
+            (
+                self._asset.data.joint_pos[:, self._joint_ids]
+                - self._asset.data.default_joint_pos[:, self._joint_ids],
+                self._asset.data.joint_vel[:, self._joint_ids]
+                - self._asset.data.default_joint_vel[:, self._joint_ids],
+            ),
+            dim=-1,
+        )
+
+        imu_obs = torch.cat(
+            (
+                self._asset.data.root_ang_vel_b,
+                self._asset.data.projected_gravity_b,
+            ),
+            dim=-1,
+        )
+        return joint_obs, imu_obs
+
     def apply_actions(self):
+        joint_obs, imu_obs = self._get_sensor_obs()
+        self._delayed_joint_obs = self._joint_obs_buffer.compute(joint_obs)
+        self._delayed_imu_obs = self._imu_obs_buffer.compute(imu_obs)
+
         # Called once per physics step, so one buffer index equals sim.dt.
         if self._max_delay > 0:
             self._action_buffer[1:] = self._action_buffer[:-1].clone()
@@ -73,6 +134,13 @@ class DelayedJointPositionAction(JointPositionAction):
         self._delay_per_env[env_ids] = torch.randint(
             self._min_delay, self._max_delay + 1, (len(env_ids),), device=self.device
         )
+
+        joint_obs, imu_obs = self._get_sensor_obs()
+        self._delayed_joint_obs[env_ids] = joint_obs[env_ids]
+        self._delayed_imu_obs[env_ids] = imu_obs[env_ids]
+        self._joint_obs_buffer.reset(env_ids)
+        self._imu_obs_buffer.reset(env_ids)
+        self._resample_obs_delay(env_ids)
         super().reset(env_ids)
 
 
@@ -87,4 +155,6 @@ class DelayedJointPositionActionCfg(JointPositionActionCfg):
     class_type: type[ActionTerm] = DelayedJointPositionAction
 
     delay_steps: int | tuple[int, int] = 0
+    joint_obs_delay_steps: tuple[int, int] = (0, 0)
+    imu_obs_delay_steps: tuple[int, int] = (0, 0)
     """Fixed delay or inclusive per-environment delay range, in physics steps."""

@@ -142,6 +142,7 @@ class ObservationsCfg:
                 "command_name": "base_velocity",
                 "command_threshold": 0.1,
                 "recovery_tilt_threshold": 0.17,
+                "action_name": "joint_pos"
             },
         )
         base_lin_vel = ObsTerm(
@@ -151,13 +152,15 @@ class ObservationsCfg:
             scale=1.0,
         )
         base_ang_vel = ObsTerm(
-            func=mdp.base_ang_vel,
+            func=mdp.delayed_base_ang_vel,
+            params={"action_name": "joint_pos"},
             noise=Unoise(n_min=-0.2, n_max=0.2),
             clip=(-100.0, 100.0),
             scale=1.0,
         )
         projected_gravity = ObsTerm(
-            func=mdp.projected_gravity,
+            func=mdp.delayed_projected_gravity,
+            params={"action_name": "joint_pos"},
             noise=Unoise(n_min=-0.05, n_max=0.05),
             clip=(-100.0, 100.0),
             scale=1.0,
@@ -169,15 +172,15 @@ class ObservationsCfg:
             scale=1.0,
         )
         joint_pos = ObsTerm(
-            func=mdp.joint_pos_rel,
-            params={"asset_cfg": SceneEntityCfg("robot", joint_names=".*", preserve_order=True)},
+            func=mdp.delayed_joint_pos_rel,
+            params={"action_name": "joint_pos"},
             noise=Unoise(n_min=-0.01, n_max=0.01),
             clip=(-100.0, 100.0),
             scale=1.0,
         )
         joint_vel = ObsTerm(
-            func=mdp.joint_vel_rel,
-            params={"asset_cfg": SceneEntityCfg("robot", joint_names=".*", preserve_order=True)},
+            func=mdp.delayed_joint_vel_rel,
+            params={"action_name": "joint_pos"},
             noise=Unoise(n_min=-1.5, n_max=1.5),
             clip=(-100.0, 100.0),
             scale=1.0,
@@ -379,7 +382,13 @@ class EventCfg:
         func=mdp.reset_root_state_uniform,
         mode="reset",
         params={
-            "pose_range": {"x": (-0.5, 0.5), "y": (-0.5, 0.5), "yaw": (-3.14, 3.14)},
+            "pose_range": {
+                "x": (-0.5, 0.5), 
+                "y": (-0.5, 0.5), 
+                "yaw": (-3.14, 3.14), 
+                "roll": (-0.3, 0.3), 
+                "pitch": (-0.3, 0.3),
+            },
             "velocity_range": {
                 "x": (-0.5, 0.5),
                 "y": (-0.5, 0.5),

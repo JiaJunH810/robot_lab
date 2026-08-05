@@ -26,6 +26,36 @@ def joint_pos_rel_without_wheel(
     joint_pos_rel[:, wheel_asset_cfg.joint_ids] = 0
     return joint_pos_rel
 
+def delayed_joint_pos_rel(
+    env: ManagerBasedEnv,
+    action_name: str,
+) -> torch.Tensor:
+    action = env.action_manager.get_term(action_name)
+    return action.delayed_joint_obs[:, :action.action_dim]
+
+
+def delayed_joint_vel_rel(
+    env: ManagerBasedEnv,
+    action_name: str,
+) -> torch.Tensor:
+    action = env.action_manager.get_term(action_name)
+    return action.delayed_joint_obs[:, action.action_dim:]
+
+
+def delayed_base_ang_vel(
+    env: ManagerBasedEnv,
+    action_name: str,
+) -> torch.Tensor:
+    action = env.action_manager.get_term(action_name)
+    return action.delayed_imu_obs[:, :3]
+
+
+def delayed_projected_gravity(
+    env: ManagerBasedEnv,
+    action_name: str,
+) -> torch.Tensor:
+    action = env.action_manager.get_term(action_name)
+    return action.delayed_imu_obs[:, 3:]
 
 def phase(
     env: ManagerBasedRLEnv,
@@ -33,6 +63,7 @@ def phase(
     command_name: str,
     command_threshold: float,
     recovery_tilt_threshold: float,
+    action_name: str | None = None,
 ) -> torch.Tensor:
     if not hasattr(env, "episode_length_buf") or env.episode_length_buf is None:
         env.episode_length_buf = torch.zeros(env.num_envs, device=env.device, dtype=torch.long,)
@@ -45,7 +76,13 @@ def phase(
         | (torch.abs(command[:, 2]) > command_threshold)
     )
 
-    tilt = torch.linalg.norm(env.scene["robot"].data.projected_gravity_b[:, :2], dim=1)
+    if action_name is None:
+        gravity = env.scene["robot"].data.projected_gravity_b
+    else:
+        action = env.action_manager.get_term(action_name)
+        gravity = action.delayed_imu_obs[:, 3:]
+
+    tilt = torch.linalg.norm(gravity[:, :2], dim=1)
     recovering = tilt > recovery_tilt_threshold
     phase_active = moving | recovering
 
