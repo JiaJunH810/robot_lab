@@ -132,7 +132,7 @@ class CyborgHPRoughEnvCfg(LocomotionVelocityRoughEnvCfg):
         self.rewards.periodic_contact_mismatch.params["recovery_tilt_threshold"] = 0.17
         self.rewards.periodic_contact_mismatch.params["sensor_cfg"].body_names = ["ankle_l_roll_link", "ankle_r_roll_link"]
         self.rewards.periodic_contact_mismatch.params["sensor_cfg"].preserve_order = True
-        self.rewards.phase_feet_height.weight = -0.5
+        self.rewards.phase_feet_height.weight = -1.0
         self.rewards.phase_feet_height.params["recovery_tilt_threshold"] = 0.17
         self.rewards.phase_feet_height.params["asset_cfg"].body_names = ["ankle_l_roll_link", "ankle_r_roll_link",]
         self.rewards.phase_feet_height.params["asset_cfg"].preserve_order = True

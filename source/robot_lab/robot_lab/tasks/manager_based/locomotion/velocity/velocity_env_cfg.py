@@ -692,7 +692,7 @@ class RewardsCfg:
         params={
             "command_name": "base_velocity",
             "cycle_time": 0.9,
-            "peak_clearance": 0.05,
+            "peak_clearance": 0.055,
             "command_threshold": 0.1,
             "asset_cfg": SceneEntityCfg("robot", body_names=[""], preserve_order=True,)
         },
