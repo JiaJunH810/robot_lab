@@ -662,14 +662,17 @@ def phase_ref_joint_pos(
     hip_scale: float,
     knee_scale: float,
     ankle_scale: float,
+    ankle_roll_scale: float = 0.0,
     command_threshold: float = 0.1,
     recovery_tilt_threshold: float | None = None,
 ) -> torch.Tensor:
     """Reward tracking a sinusoidal gait reference on the sagittal joints.
 
-    The joint order in asset_cfg must be [hip_l, hip_r, knee_l, knee_r, ankle_l, ankle_r].
+    The joint order in asset_cfg must be
+    [hip_l, hip_r, knee_l, knee_r, ankle_p_l, ankle_p_r, ankle_r_l, ankle_r_r].
     Left/right pitch axes are mirrored: the swing offset is applied to both sides,
     with a +1/-1 sign flip per side so the swing leg always moves toward flexion.
+    Ankle joints keep scale 0 to stay at the default pose throughout the gait.
     """
     asset: Articulation = env.scene[asset_cfg.name]
 
@@ -682,10 +685,17 @@ def phase_ref_joint_pos(
     swing_r = torch.clamp(sin_pos, min=0.0)
 
     # Reference = default pose + swing offsets on the sagittal joints.
-    offsets = torch.stack([swing_l, swing_r] * 3, dim=1)  # (N, 6)
-    signs = torch.tensor([1.0, -1.0, 1.0, -1.0, 1.0, -1.0], device=env.device)
+    offsets = torch.stack([swing_l, swing_r] * 4, dim=1)  # (N, 8)
+    signs = torch.tensor(
+        [1.0, -1.0, 1.0, -1.0, 1.0, -1.0, 1.0, -1.0], device=env.device
+    )
     scales = torch.tensor(
-        [hip_scale, hip_scale, knee_scale, knee_scale, ankle_scale, ankle_scale],
+        [
+            hip_scale, hip_scale,
+            knee_scale, knee_scale,
+            ankle_scale, ankle_scale,
+            ankle_roll_scale, ankle_roll_scale,
+        ],
         device=env.device,
     )
     ref = asset.data.default_joint_pos[:, asset_cfg.joint_ids].clone()

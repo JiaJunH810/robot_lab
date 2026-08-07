@@ -121,7 +121,8 @@ class CyborgHPRoughEnvCfg(LocomotionVelocityRoughEnvCfg):
         self.rewards.feet_slide.params["sensor_cfg"].body_names = [self.foot_link_name]
         self.rewards.feet_slide.params["asset_cfg"].body_names = [self.foot_link_name]
         # 步宽约束（防交叉脚）：期望两脚 y 距离 0.31 m（default 位姿步宽），body 顺序须为 [左, 右]
-        self.rewards.feet_distance_y_exp.weight = 0.2
+        self.rewards.feet_distance_y_exp.weight = 0.5
+        self.rewards.feet_distance_y_exp.params["std"] = 0.15
         self.rewards.feet_distance_y_exp.params["stance_width"] = 0.31
         self.rewards.feet_distance_y_exp.params["asset_cfg"].body_names = [self.foot_link_name]
         self.rewards.feet_distance_y_exp.params["asset_cfg"].preserve_order = True
@@ -139,6 +140,9 @@ class CyborgHPRoughEnvCfg(LocomotionVelocityRoughEnvCfg):
         # phase_feet_height 已关闭（weight 0）：与 phase_ref_joint_pos 同一摆动窗口双重约束，冗余
         self.rewards.phase_ref_joint_pos.weight = 2.0
         self.rewards.phase_ref_joint_pos.params["recovery_tilt_threshold"] = 0.17
+        # 脚踝 pitch/roll 全程保持 default（0 振幅，不参与摆动相）
+        self.rewards.phase_ref_joint_pos.params["ankle_scale"] = 0.0
+        self.rewards.phase_ref_joint_pos.params["ankle_roll_scale"] = 0.0
 
         # If the weight of rewards is 0, set rewards to None
         if self.__class__.__name__ == "CyborgHPRoughEnvCfg":
