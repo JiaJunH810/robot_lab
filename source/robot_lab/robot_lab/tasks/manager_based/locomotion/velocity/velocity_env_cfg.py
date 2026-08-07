@@ -698,6 +698,23 @@ class RewardsCfg:
         },
     )
 
+    phase_ref_joint_pos = RewTerm(
+        func=mdp.phase_ref_joint_pos,
+        weight=0.0,
+        params={
+            "command_name": "base_velocity",
+            "cycle_time": 0.9,
+            "hip_scale": 0.26,
+            "knee_scale": 0.52,
+            "ankle_scale": 0.26,
+            "command_threshold": 0.1,
+            "asset_cfg": SceneEntityCfg(
+                "robot",
+                joint_names=["J_hip_.*_pitch", "J_knee_.*_pitch", "J_ankle_.*_pitch"],
+            ),
+        },
+    )
+
     feet_height_body = RewTerm(
         func=mdp.feet_height_body,
         weight=0.0,

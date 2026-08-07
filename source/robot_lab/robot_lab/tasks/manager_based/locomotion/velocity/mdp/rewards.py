@@ -653,6 +653,51 @@ def phase_feet_height(
     phase_active = _phase_active(env, command_name, command_threshold, recovery_tilt_threshold)
     return penalty * phase_active.float()
 
+
+def phase_ref_joint_pos(
+    env: ManagerBasedRLEnv,
+    command_name: str,
+    asset_cfg: SceneEntityCfg,
+    cycle_time: float,
+    hip_scale: float,
+    knee_scale: float,
+    ankle_scale: float,
+    command_threshold: float = 0.1,
+    recovery_tilt_threshold: float | None = None,
+) -> torch.Tensor:
+    """Reward tracking a sinusoidal gait reference on the sagittal joints.
+
+    The joint order in asset_cfg must be [hip_l, hip_r, knee_l, knee_r, ankle_l, ankle_r].
+    Left/right pitch axes are mirrored: the swing offset is applied to both sides,
+    with a +1/-1 sign flip per side so the swing leg always moves toward flexion.
+    """
+    asset: Articulation = env.scene[asset_cfg.name]
+
+    phase = env.episode_length_buf.float() * env.step_dt / cycle_time
+    phase = torch.remainder(phase, 1.0)
+
+    # Left leg swings during [0.55, 0.95) (sin < 0), right leg during [0.05, 0.45) (sin > 0).
+    sin_pos = torch.sin(2.0 * torch.pi * phase)
+    swing_l = torch.clamp(-sin_pos, min=0.0)
+    swing_r = torch.clamp(sin_pos, min=0.0)
+
+    # Reference = default pose + swing offsets on the sagittal joints.
+    offsets = torch.stack([swing_l, swing_r] * 3, dim=1)  # (N, 6)
+    signs = torch.tensor([1.0, -1.0, 1.0, -1.0, 1.0, -1.0], device=env.device)
+    scales = torch.tensor(
+        [hip_scale, hip_scale, knee_scale, knee_scale, ankle_scale, ankle_scale],
+        device=env.device,
+    )
+    ref = asset.data.default_joint_pos[:, asset_cfg.joint_ids].clone()
+    ref = ref + offsets * signs * scales
+
+    diff = asset.data.joint_pos[:, asset_cfg.joint_ids] - ref
+    error_norm = torch.linalg.norm(diff, dim=1)
+    reward = torch.exp(-2.0 * error_norm) - 0.2 * error_norm.clamp(max=0.5)
+
+    phase_active = _phase_active(env, command_name, command_threshold, recovery_tilt_threshold)
+    return reward * phase_active.float()
+
 def feet_slide(
     env: ManagerBasedRLEnv, sensor_cfg: SceneEntityCfg, asset_cfg: SceneEntityCfg = SceneEntityCfg("robot")
 ) -> torch.Tensor:

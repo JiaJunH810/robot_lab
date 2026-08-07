@@ -136,6 +136,8 @@ class CyborgHPRoughEnvCfg(LocomotionVelocityRoughEnvCfg):
         self.rewards.phase_feet_height.params["recovery_tilt_threshold"] = 0.17
         self.rewards.phase_feet_height.params["asset_cfg"].body_names = ["ankle_l_roll_link", "ankle_r_roll_link",]
         self.rewards.phase_feet_height.params["asset_cfg"].preserve_order = True
+        self.rewards.phase_ref_joint_pos.weight = 2.0
+        self.rewards.phase_ref_joint_pos.params["recovery_tilt_threshold"] = 0.17
 
         # If the weight of rewards is 0, set rewards to None
         if self.__class__.__name__ == "CyborgHPRoughEnvCfg":
