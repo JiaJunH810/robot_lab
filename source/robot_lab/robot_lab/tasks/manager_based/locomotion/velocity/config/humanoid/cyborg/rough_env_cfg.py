@@ -44,9 +44,9 @@ class CyborgHPRoughEnvCfg(LocomotionVelocityRoughEnvCfg):
             use_default_offset=True, 
             clip={".*": (-100.0, 100.0)}, 
             preserve_order=True,
-            delay_steps=(1, 20),
-            joint_obs_delay_steps=(1, 20),
-            imu_obs_delay_steps=(1, 20)
+            delay_steps=(1, 10),
+            joint_obs_delay_steps=(1, 10),
+            imu_obs_delay_steps=(1, 10)
         )
 
         # ------------------------------Events------------------------------
@@ -83,8 +83,7 @@ class CyborgHPRoughEnvCfg(LocomotionVelocityRoughEnvCfg):
         self.rewards.joint_power.weight = 0
         self.rewards.stand_still.weight = -1.0
         self.rewards.stand_still.params["recovery_tilt_threshold"] = 0.17
-        self.rewards.joint_pos_penalty.weight = -0.5
-        self.rewards.joint_pos_penalty.params["recovery_tilt_threshold"] = 0.17
+        # joint_pos_penalty 已关闭（weight 0）：运动时与 phase_ref_joint_pos 对抗，静止时与 stand_still 重复
         self.rewards.joint_mirror.weight = 0
         self.rewards.joint_mirror.params["mirror_joints"] = [["J_.*_l_.*", "J_.*_r_.*"]]
 
@@ -121,6 +120,11 @@ class CyborgHPRoughEnvCfg(LocomotionVelocityRoughEnvCfg):
         self.rewards.feet_slide.weight = -0.2
         self.rewards.feet_slide.params["sensor_cfg"].body_names = [self.foot_link_name]
         self.rewards.feet_slide.params["asset_cfg"].body_names = [self.foot_link_name]
+        # 步宽约束（防交叉脚）：期望两脚 y 距离 0.31 m（default 位姿步宽），body 顺序须为 [左, 右]
+        self.rewards.feet_distance_y_exp.weight = 0.2
+        self.rewards.feet_distance_y_exp.params["stance_width"] = 0.31
+        self.rewards.feet_distance_y_exp.params["asset_cfg"].body_names = [self.foot_link_name]
+        self.rewards.feet_distance_y_exp.params["asset_cfg"].preserve_order = True
         self.rewards.feet_height.weight = 0.0
         self.rewards.feet_height.params["target_height"] = 0.12
         self.rewards.feet_height.params["asset_cfg"].body_names = [self.foot_link_name]
@@ -132,10 +136,7 @@ class CyborgHPRoughEnvCfg(LocomotionVelocityRoughEnvCfg):
         self.rewards.periodic_contact_mismatch.params["recovery_tilt_threshold"] = 0.17
         self.rewards.periodic_contact_mismatch.params["sensor_cfg"].body_names = ["ankle_l_roll_link", "ankle_r_roll_link"]
         self.rewards.periodic_contact_mismatch.params["sensor_cfg"].preserve_order = True
-        self.rewards.phase_feet_height.weight = -1.0
-        self.rewards.phase_feet_height.params["recovery_tilt_threshold"] = 0.17
-        self.rewards.phase_feet_height.params["asset_cfg"].body_names = ["ankle_l_roll_link", "ankle_r_roll_link",]
-        self.rewards.phase_feet_height.params["asset_cfg"].preserve_order = True
+        # phase_feet_height 已关闭（weight 0）：与 phase_ref_joint_pos 同一摆动窗口双重约束，冗余
         self.rewards.phase_ref_joint_pos.weight = 2.0
         self.rewards.phase_ref_joint_pos.params["recovery_tilt_threshold"] = 0.17
 

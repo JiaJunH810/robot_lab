@@ -33,7 +33,7 @@ class CyborgHPFlatEnvCfg(CyborgHPRoughEnvCfg):
         self.rewards.feet_air_time.weight = 0.0
         self.rewards.feet_air_time.params["threshold"] = 0.4
         self.rewards.feet_air_time_variance.weight = 0.0
-        # joint_pos_penalty inherits -1.0 from rough_env_cfg
+        # joint_pos_penalty 已关闭（rough 中 weight 0，与 phase_ref_joint_pos 对抗）
         self.rewards.feet_slide.weight = -0.1
 
         # If the weight of rewards is 0, set rewards to None
