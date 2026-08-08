@@ -708,10 +708,12 @@ class RewardsCfg:
             "knee_scale": 0.52,
             "ankle_scale": 0.26,
             "ankle_roll_scale": 0.0,
+            "hip_yaw_scale": 0.0,
             "command_threshold": 0.1,
             "asset_cfg": SceneEntityCfg(
                 "robot",
                 joint_names=[
+                    "J_hip_.*_yaw",
                     "J_hip_.*_pitch",
                     "J_knee_.*_pitch",
                     "J_ankle_.*_pitch",

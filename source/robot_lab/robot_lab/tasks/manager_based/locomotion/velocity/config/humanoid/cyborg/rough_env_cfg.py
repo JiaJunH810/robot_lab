@@ -58,7 +58,7 @@ class CyborgHPRoughEnvCfg(LocomotionVelocityRoughEnvCfg):
 
         # ------------------------------Rewards------------------------------
         # General
-        self.rewards.is_terminated.weight = -200.0
+        # is_terminated 已关闭（EngineAI 无终止惩罚，靠 undesired_contacts 前置惩罚）
 
         # Root penalties
         self.rewards.lin_vel_z_l2.weight = 0
@@ -93,7 +93,8 @@ class CyborgHPRoughEnvCfg(LocomotionVelocityRoughEnvCfg):
         self.rewards.action_mirror.params["mirror_joints"] = [["J_.*_l_.*", "J_.*_r_.*"]]
 
         # Contact sensor
-        self.rewards.undesired_contacts.weight = 0
+        # collision 前置惩罚（EngineAI 风格）：非脚部件接触即罚，摔倒前逐帧干预
+        self.rewards.undesired_contacts.weight = -1.0
         self.rewards.undesired_contacts.params["sensor_cfg"].body_names = [f"^(?!.*{self.foot_link_name}).*"]
         self.rewards.contact_forces.weight = 0
         self.rewards.contact_forces.params["sensor_cfg"].body_names = [self.foot_link_name]
@@ -140,17 +141,26 @@ class CyborgHPRoughEnvCfg(LocomotionVelocityRoughEnvCfg):
         # phase_feet_height 已关闭（weight 0）：与 phase_ref_joint_pos 同一摆动窗口双重约束，冗余
         self.rewards.phase_ref_joint_pos.weight = 2.0
         self.rewards.phase_ref_joint_pos.params["recovery_tilt_threshold"] = 0.17
-        # 脚踝 pitch/roll 全程保持 default（0 振幅，不参与摆动相）
-        self.rewards.phase_ref_joint_pos.params["ankle_scale"] = 0.0
+        # 踝 pitch 小振幅（0.15）：摆动相适度背屈，对齐 ENCOS 实摆 0.13——纯钉死会迫使
+        # 膝补偿（实测膝 0.44、触地最重）；踝 roll 仍 0 振幅（额状面稳）
+        self.rewards.phase_ref_joint_pos.params["ankle_scale"] = 0.15
         self.rewards.phase_ref_joint_pos.params["ankle_roll_scale"] = 0.0
+        # hip_yaw 0 振幅（钉在 default，不参与摆动相）
+        self.rewards.phase_ref_joint_pos.params["hip_yaw_scale"] = 0.0
+        # 膝摆幅调小（0.52→0.35）：原版幅度对 Cyborg 偏大，实测膝实摆 0.44 rad、
+        # 触地速度 5-20 倍于 ENCOS（0.26 实摆）——降幅减少砸地
+        self.rewards.phase_ref_joint_pos.params["knee_scale"] = 0.35
 
         # If the weight of rewards is 0, set rewards to None
         if self.__class__.__name__ == "CyborgHPRoughEnvCfg":
             self.disable_zero_weight_rewards()
 
         # ------------------------------Terminations------------------------------
-        self.terminations.illegal_contact = None
-        self.terminations.bad_base_height.params["minimum_height"] = 0.65
+        # EngineAI 式接触终止：躯干或膝盖接触力 >1N 即终止（替代姿态/高度终止）
+        self.terminations.illegal_contact.params["sensor_cfg"].body_names = ["base_link", "knee_.*_pitch_link"]
+        self.terminations.illegal_contact.params["threshold"] = 1.0
+        self.terminations.bad_orientation = None
+        self.terminations.bad_base_height = None
 
         # ------------------------------Curriculums------------------------------
         # Enabled: start at 10% velocity range, scale up to 100% as tracking improves
@@ -164,4 +174,4 @@ class CyborgHPRoughEnvCfg(LocomotionVelocityRoughEnvCfg):
         self.commands.base_velocity.ranges.ang_vel_z = (-0.6, 0.6)
 
         # ------------------------------Episode------------------------------
-        self.episode_length_s = 30.0
+        self.episode_length_s = 20.0

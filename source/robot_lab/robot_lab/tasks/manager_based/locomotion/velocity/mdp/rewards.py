@@ -663,34 +663,38 @@ def phase_ref_joint_pos(
     knee_scale: float,
     ankle_scale: float,
     ankle_roll_scale: float = 0.0,
+    hip_yaw_scale: float = 0.0,
     command_threshold: float = 0.1,
     recovery_tilt_threshold: float | None = None,
 ) -> torch.Tensor:
     """Reward tracking a sinusoidal gait reference on the sagittal joints.
 
     The joint order in asset_cfg must be
-    [hip_l, hip_r, knee_l, knee_r, ankle_p_l, ankle_p_r, ankle_r_l, ankle_r_r].
+    [hip_y_l, hip_y_r, hip_p_l, hip_p_r, knee_l, knee_r,
+     ankle_p_l, ankle_p_r, ankle_r_l, ankle_r_r].
     Left/right pitch axes are mirrored: the swing offset is applied to both sides,
     with a +1/-1 sign flip per side so the swing leg always moves toward flexion.
-    Ankle joints keep scale 0 to stay at the default pose throughout the gait.
+    hip_yaw and ankle joints keep scale 0 to stay at the default pose throughout the gait.
     """
     asset: Articulation = env.scene[asset_cfg.name]
 
     phase = env.episode_length_buf.float() * env.step_dt / cycle_time
     phase = torch.remainder(phase, 1.0)
 
-    # Left leg swings during [0.55, 0.95) (sin < 0), right leg during [0.05, 0.45) (sin > 0).
-    sin_pos = torch.sin(2.0 * torch.pi * phase)
-    swing_l = torch.clamp(-sin_pos, min=0.0)
-    swing_r = torch.clamp(sin_pos, min=0.0)
+    # Left leg swings during [0.55, 0.95), right leg during [0.05, 0.45).
+    # sin²(π·progress) 两端斜率 = 0：抬起/落下平缓。避免 |sin| 在摆动相末端
+    # 以最快速度落回 default 导致脚砸地（实测触地速度 0.29-0.59 vs ENCOS 0.03-0.06 m/s）
+    left_progress = torch.clamp((phase - 0.55) / 0.40, min=0.0, max=1.0)
+    right_progress = torch.clamp((phase - 0.05) / 0.40, min=0.0, max=1.0)
+    swing_l = torch.sin(torch.pi * left_progress).square()
+    swing_r = torch.sin(torch.pi * right_progress).square()
 
     # Reference = default pose + swing offsets on the sagittal joints.
-    offsets = torch.stack([swing_l, swing_r] * 4, dim=1)  # (N, 8)
-    signs = torch.tensor(
-        [1.0, -1.0, 1.0, -1.0, 1.0, -1.0, 1.0, -1.0], device=env.device
-    )
+    offsets = torch.stack([swing_l, swing_r] * 5, dim=1)  # (N, 10)
+    signs = torch.tensor([1.0, -1.0] * 5, device=env.device)
     scales = torch.tensor(
         [
+            hip_yaw_scale, hip_yaw_scale,
             hip_scale, hip_scale,
             knee_scale, knee_scale,
             ankle_scale, ankle_scale,
