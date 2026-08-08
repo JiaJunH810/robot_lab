@@ -58,7 +58,7 @@ class CyborgHPRoughEnvCfg(LocomotionVelocityRoughEnvCfg):
 
         # ------------------------------Rewards------------------------------
         # General
-        # is_terminated 已关闭（EngineAI 无终止惩罚，靠 undesired_contacts 前置惩罚）
+        self.rewards.is_terminated.weight = -200.0
 
         # Root penalties
         self.rewards.lin_vel_z_l2.weight = 0
@@ -156,11 +156,8 @@ class CyborgHPRoughEnvCfg(LocomotionVelocityRoughEnvCfg):
             self.disable_zero_weight_rewards()
 
         # ------------------------------Terminations------------------------------
-        # EngineAI 式接触终止：躯干或膝盖接触力 >1N 即终止（替代姿态/高度终止）
-        self.terminations.illegal_contact.params["sensor_cfg"].body_names = ["base_link", "knee_.*_pitch_link"]
-        self.terminations.illegal_contact.params["threshold"] = 1.0
-        self.terminations.bad_orientation = None
-        self.terminations.bad_base_height = None
+        self.terminations.illegal_contact = None
+        self.terminations.bad_base_height.params["minimum_height"] = 0.65
 
         # ------------------------------Curriculums------------------------------
         # Enabled: start at 10% velocity range, scale up to 100% as tracking improves
