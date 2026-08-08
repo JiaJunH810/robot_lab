@@ -96,7 +96,9 @@ class CyborgHPRoughEnvCfg(LocomotionVelocityRoughEnvCfg):
         # collision 前置惩罚（EngineAI 风格）：非脚部件接触即罚，摔倒前逐帧干预
         self.rewards.undesired_contacts.weight = -1.0
         self.rewards.undesired_contacts.params["sensor_cfg"].body_names = [f"^(?!.*{self.foot_link_name}).*"]
-        self.rewards.contact_forces.weight = 0
+        # EngineAI 式接触力惩罚（zqsa01: (F-500) 线性罚）：直接抑制触地冲击
+        self.rewards.contact_forces.weight = -0.02
+        self.rewards.contact_forces.params["threshold"] = 500.0
         self.rewards.contact_forces.params["sensor_cfg"].body_names = [self.foot_link_name]
 
         # Velocity-tracking rewards
@@ -127,8 +129,11 @@ class CyborgHPRoughEnvCfg(LocomotionVelocityRoughEnvCfg):
         self.rewards.feet_distance_y_exp.params["stance_width"] = 0.31
         self.rewards.feet_distance_y_exp.params["asset_cfg"].body_names = [self.foot_link_name]
         self.rewards.feet_distance_y_exp.params["asset_cfg"].preserve_order = True
-        self.rewards.feet_height.weight = 0.0
-        self.rewards.feet_height.params["target_height"] = 0.12
+        # EngineAI 式抬脚约束（zqsa01: target_feet_height=0.10）。feet_height 为误差
+        # 平方×速度门控（摆动脚钉向 target，max≈0.01/脚），weight -50 → 峰值 ~0.5/脚，
+        # 量级 ≈ EngineAI 事件型 scale 1.6
+        self.rewards.feet_height.weight = -50.0
+        self.rewards.feet_height.params["target_height"] = 0.10
         self.rewards.feet_height.params["asset_cfg"].body_names = [self.foot_link_name]
         self.rewards.feet_height_body.weight = 0
         self.rewards.feet_height_body.params["target_height"] = -0.2
@@ -141,15 +146,13 @@ class CyborgHPRoughEnvCfg(LocomotionVelocityRoughEnvCfg):
         # phase_feet_height 已关闭（weight 0）：与 phase_ref_joint_pos 同一摆动窗口双重约束，冗余
         self.rewards.phase_ref_joint_pos.weight = 2.0
         self.rewards.phase_ref_joint_pos.params["recovery_tilt_threshold"] = 0.17
-        # 踝 pitch 小振幅（0.15）：摆动相适度背屈，对齐 ENCOS 实摆 0.13——纯钉死会迫使
-        # 膝补偿（实测膝 0.44、触地最重）；踝 roll 仍 0 振幅（额状面稳）
-        self.rewards.phase_ref_joint_pos.params["ankle_scale"] = 0.15
+        # 踝 pitch 0 振幅（钉死在 default）：实测 0.15 背屈未改善触地 vz，改回纯钉死
+        self.rewards.phase_ref_joint_pos.params["ankle_scale"] = 0.0
         self.rewards.phase_ref_joint_pos.params["ankle_roll_scale"] = 0.0
         # hip_yaw 0 振幅（钉在 default，不参与摆动相）
         self.rewards.phase_ref_joint_pos.params["hip_yaw_scale"] = 0.0
-        # 膝摆幅调小（0.52→0.35）：原版幅度对 Cyborg 偏大，实测膝实摆 0.44 rad、
-        # 触地速度 5-20 倍于 ENCOS（0.26 实摆）——降幅减少砸地
-        self.rewards.phase_ref_joint_pos.params["knee_scale"] = 0.35
+        # 膝摆幅 0.45（折中：0.52 抬脚过高 68-73mm，0.35 仅 13-25mm）
+        self.rewards.phase_ref_joint_pos.params["knee_scale"] = 0.45
 
         # If the weight of rewards is 0, set rewards to None
         if self.__class__.__name__ == "CyborgHPRoughEnvCfg":
