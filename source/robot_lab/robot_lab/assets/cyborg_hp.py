@@ -79,8 +79,27 @@ CYBORG_HALF_PED_CFG = ArticulationCfg(
             ],
             effort_limit_sim=330.0,
             velocity_limit_sim=12.043,
-            stiffness=STIFFNESS_10020_24,
-            damping=DAMPING_10020_24,
+            stiffness={
+                # 与 sim2real_encos 部署配置一致 (Cyborg_Encos_Config.yaml)
+                "J_hip_l_roll": 250.0,
+                "J_hip_r_roll": 250.0,
+                "J_hip_l_yaw": 120.0,
+                "J_hip_r_yaw": 120.0,
+                "J_hip_l_pitch": 300.0,
+                "J_hip_r_pitch": 300.0,
+                "J_knee_l_pitch": 300.0,
+                "J_knee_r_pitch": 300.0,
+            },
+            damping={
+                "J_hip_l_roll": 10.0,
+                "J_hip_r_roll": 10.0,
+                "J_hip_l_yaw": 10.0,
+                "J_hip_r_yaw": 10.0,
+                "J_hip_l_pitch": 10.0,
+                "J_hip_r_pitch": 10.0,
+                "J_knee_l_pitch": 10.0,
+                "J_knee_r_pitch": 10.0,
+            },
             armature=ARMATURE_10020_24,
             friction={
                 "J_hip_l_roll": 2.35,
@@ -108,8 +127,19 @@ CYBORG_HALF_PED_CFG = ArticulationCfg(
             joint_names_expr=["J_ankle_.*_pitch", "J_ankle_.*_roll"],
             effort_limit_sim=120.0,
             velocity_limit_sim=11.205,
-            stiffness=STIFFNESS_6416,
-            damping=DAMPING_6416,
+            stiffness={
+                # 与 sim2real_encos 部署配置一致 (Cyborg_Encos_Config.yaml)
+                "J_ankle_l_pitch": 80.0,
+                "J_ankle_r_pitch": 80.0,
+                "J_ankle_l_roll": 80.0,
+                "J_ankle_r_roll": 80.0,
+            },
+            damping={
+                "J_ankle_l_pitch": 3.0,
+                "J_ankle_r_pitch": 3.0,
+                "J_ankle_l_roll": 3.0,
+                "J_ankle_r_roll": 3.0,
+            },
             armature=ARMATURE_6416,
             friction={
                 "J_ankle_l_pitch": 1.50,
@@ -139,3 +169,20 @@ for actuator in CYBORG_HALF_PED_CFG.actuators.values():
     for name in joint_names:
         if name in effort_limit and name in stiffness and stiffness[name]:
             CYBORG_HALF_PED_ACTION_SCALE[name] = 0.25 * effort_limit[name] / stiffness[name]
+
+# action_scale 与 sim2real_encos 部署配置一致（hip_roll 0.4，其余 0.35），
+# 覆盖上式推导值（0.25*effort/kp 与 encos 配置不符）
+CYBORG_HALF_PED_ACTION_SCALE.update({
+    "J_hip_l_roll": 0.4,
+    "J_hip_r_roll": 0.4,
+    "J_hip_l_yaw": 0.35,
+    "J_hip_r_yaw": 0.35,
+    "J_hip_l_pitch": 0.35,
+    "J_hip_r_pitch": 0.35,
+    "J_knee_l_pitch": 0.35,
+    "J_knee_r_pitch": 0.35,
+    "J_ankle_l_pitch": 0.35,
+    "J_ankle_r_pitch": 0.35,
+    "J_ankle_l_roll": 0.35,
+    "J_ankle_r_roll": 0.35,
+})
