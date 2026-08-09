@@ -663,38 +663,34 @@ def phase_ref_joint_pos(
     knee_scale: float,
     ankle_scale: float,
     ankle_roll_scale: float = 0.0,
-    hip_yaw_scale: float = 0.0,
     command_threshold: float = 0.1,
     recovery_tilt_threshold: float | None = None,
 ) -> torch.Tensor:
     """Reward tracking a sinusoidal gait reference on the sagittal joints.
 
     The joint order in asset_cfg must be
-    [hip_y_l, hip_y_r, hip_p_l, hip_p_r, knee_l, knee_r,
-     ankle_p_l, ankle_p_r, ankle_r_l, ankle_r_r].
+    [hip_l, hip_r, knee_l, knee_r, ankle_p_l, ankle_p_r, ankle_r_l, ankle_r_r].
     Left/right pitch axes are mirrored: the swing offset is applied to both sides,
     with a +1/-1 sign flip per side so the swing leg always moves toward flexion.
-    hip_yaw and ankle joints keep scale 0 to stay at the default pose throughout the gait.
+    Ankle joints keep scale 0 to stay at the default pose throughout the gait.
     """
     asset: Articulation = env.scene[asset_cfg.name]
 
     phase = env.episode_length_buf.float() * env.step_dt / cycle_time
     phase = torch.remainder(phase, 1.0)
 
-    # Left leg swings during [0.55, 0.95), right leg during [0.05, 0.45).
-    # sin²(π·progress) 两端斜率 = 0：抬起/落下平缓。避免 |sin| 在摆动相末端
-    # 以最快速度落回 default 导致脚砸地（实测触地速度 0.29-0.59 vs ENCOS 0.03-0.06 m/s）
-    left_progress = torch.clamp((phase - 0.55) / 0.40, min=0.0, max=1.0)
-    right_progress = torch.clamp((phase - 0.05) / 0.40, min=0.0, max=1.0)
-    swing_l = torch.sin(torch.pi * left_progress).square()
-    swing_r = torch.sin(torch.pi * right_progress).square()
+    # Left leg swings during [0.55, 0.95) (sin < 0), right leg during [0.05, 0.45) (sin > 0).
+    sin_pos = torch.sin(2.0 * torch.pi * phase)
+    swing_l = torch.clamp(-sin_pos, min=0.0)
+    swing_r = torch.clamp(sin_pos, min=0.0)
 
     # Reference = default pose + swing offsets on the sagittal joints.
-    offsets = torch.stack([swing_l, swing_r] * 5, dim=1)  # (N, 10)
-    signs = torch.tensor([1.0, -1.0] * 5, device=env.device)
+    offsets = torch.stack([swing_l, swing_r] * 4, dim=1)  # (N, 8)
+    signs = torch.tensor(
+        [1.0, -1.0, 1.0, -1.0, 1.0, -1.0, 1.0, -1.0], device=env.device
+    )
     scales = torch.tensor(
         [
-            hip_yaw_scale, hip_yaw_scale,
             hip_scale, hip_scale,
             knee_scale, knee_scale,
             ankle_scale, ankle_scale,
@@ -715,32 +711,18 @@ def phase_ref_joint_pos(
 def feet_slide(
     env: ManagerBasedRLEnv, sensor_cfg: SceneEntityCfg, asset_cfg: SceneEntityCfg = SceneEntityCfg("robot")
 ) -> torch.Tensor:
-    """Penalize feet sliding.
+    """Penalize feet sliding（对齐 EngineAI zqsa01._reward_foot_slip）。
 
-    This function penalizes the agent for sliding its feet on the ground. The reward is computed as the
-    norm of the linear velocity of the feet multiplied by a binary contact sensor. This ensures that the
-    agent is penalized only when the feet are in contact with the ground.
+    世界系脚水平速度开根号 × 接触掩码（垂直力 > 5N）。与 EngineAI 差异：
+    保留 projected_gravity 门控（防摔倒误罚）。
     """
     # Penalize feet sliding
     contact_sensor: ContactSensor = env.scene.sensors[sensor_cfg.name]
-    contacts = contact_sensor.data.net_forces_w_history[:, :, sensor_cfg.body_ids, :].norm(dim=-1).max(dim=1)[0] > 1.0
+    contacts = contact_sensor.data.net_forces_w[:, sensor_cfg.body_ids, 2] > 5.0
     asset: RigidObject = env.scene[asset_cfg.name]
 
-    # feet_vel = asset.data.body_lin_vel_w[:, asset_cfg.body_ids, :2]
-    # reward = torch.sum(feet_vel.norm(dim=-1) * contacts, dim=1)
-
-    cur_footvel_translated = asset.data.body_lin_vel_w[:, asset_cfg.body_ids, :] - asset.data.root_lin_vel_w[
-        :, :
-    ].unsqueeze(1)
-    footvel_in_body_frame = torch.zeros(env.num_envs, len(asset_cfg.body_ids), 3, device=env.device)
-    for i in range(len(asset_cfg.body_ids)):
-        footvel_in_body_frame[:, i, :] = math_utils.quat_apply_inverse(
-            asset.data.root_quat_w, cur_footvel_translated[:, i, :]
-        )
-    foot_leteral_vel = torch.sqrt(torch.sum(torch.square(footvel_in_body_frame[:, :, :2]), dim=2)).view(
-        env.num_envs, -1
-    )
-    reward = torch.sum(foot_leteral_vel * contacts, dim=1)
+    foot_speed = torch.linalg.norm(asset.data.body_lin_vel_w[:, asset_cfg.body_ids, :2], dim=2)
+    reward = torch.sum(torch.sqrt(foot_speed) * contacts, dim=1)
     reward *= torch.clamp(-env.scene["robot"].data.projected_gravity_b[:, 2], 0, 0.7) / 0.7
     return reward
 

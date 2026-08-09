@@ -308,7 +308,7 @@ class EventCfg:
         mode="startup",
         params={
             "asset_cfg": SceneEntityCfg("robot", body_names=".*"),
-            "mass_distribution_params": (0.5, 1.5),
+            "mass_distribution_params": (0.7, 1.3),
             "operation": "scale",
             "recompute_inertia": True,
         },
@@ -360,8 +360,8 @@ class EventCfg:
         mode="reset",
         params={
             "asset_cfg": SceneEntityCfg("robot", joint_names=".*"),
-            "stiffness_distribution_params": (0.7, 1.3),
-            "damping_distribution_params": (0.7, 1.3),
+            "stiffness_distribution_params": (0.8, 1.2),
+            "damping_distribution_params": (0.8, 1.2),
             "operation": "scale",
             "distribution": "uniform",
         },
@@ -372,7 +372,7 @@ class EventCfg:
         mode="reset",
         params={
             "asset_cfg": SceneEntityCfg("robot", joint_names=".*"),
-            "friction_distribution_params": (0.5, 1.5),
+            "friction_distribution_params": (0.8, 1.2),
             "operation": "scale",
             "distribution": "uniform",
         },
@@ -430,7 +430,7 @@ class EventCfg:
         mode="reset",
         params={
             "asset_cfg": SceneEntityCfg("robot", joint_names=".*"),
-            "armature_distribution_params": (0.7, 1.3),
+            "armature_distribution_params": (0.8, 1.2),
             "operation": "scale",
             "distribution": "uniform",
         },
@@ -708,12 +708,10 @@ class RewardsCfg:
             "knee_scale": 0.52,
             "ankle_scale": 0.26,
             "ankle_roll_scale": 0.0,
-            "hip_yaw_scale": 0.0,
             "command_threshold": 0.1,
             "asset_cfg": SceneEntityCfg(
                 "robot",
                 joint_names=[
-                    "J_hip_.*_yaw",
                     "J_hip_.*_pitch",
                     "J_knee_.*_pitch",
                     "J_ankle_.*_pitch",
