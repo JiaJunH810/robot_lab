@@ -66,6 +66,30 @@ def track_lin_vel_xy_yaw_frame_exp(
     return reward
 
 
+def track_lin_vel_x_yaw_frame_exp(
+    env, std: float, command_name: str, asset_cfg: SceneEntityCfg = SceneEntityCfg("robot")
+) -> torch.Tensor:
+    """Reward tracking of the x linear velocity command in the gravity-aligned robot frame."""
+    asset = env.scene[asset_cfg.name]
+    vel_yaw = quat_apply_inverse(yaw_quat(asset.data.root_quat_w), asset.data.root_lin_vel_w[:, :3])
+    error = torch.square(env.command_manager.get_command(command_name)[:, 0] - vel_yaw[:, 0])
+    reward = torch.exp(-error / std**2)
+    reward *= torch.clamp(-env.scene["robot"].data.projected_gravity_b[:, 2], 0, 0.7) / 0.7
+    return reward
+
+
+def track_lin_vel_y_yaw_frame_exp(
+    env, std: float, command_name: str, asset_cfg: SceneEntityCfg = SceneEntityCfg("robot")
+) -> torch.Tensor:
+    """Reward tracking of the y linear velocity command in the gravity-aligned robot frame."""
+    asset = env.scene[asset_cfg.name]
+    vel_yaw = quat_apply_inverse(yaw_quat(asset.data.root_quat_w), asset.data.root_lin_vel_w[:, :3])
+    error = torch.square(env.command_manager.get_command(command_name)[:, 1] - vel_yaw[:, 1])
+    reward = torch.exp(-error / std**2)
+    reward *= torch.clamp(-env.scene["robot"].data.projected_gravity_b[:, 2], 0, 0.7) / 0.7
+    return reward
+
+
 def track_ang_vel_z_world_exp(
     env, command_name: str, std: float, asset_cfg: SceneEntityCfg = SceneEntityCfg("robot")
 ) -> torch.Tensor:

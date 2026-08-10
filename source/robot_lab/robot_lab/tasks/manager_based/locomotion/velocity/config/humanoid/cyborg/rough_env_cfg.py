@@ -9,7 +9,7 @@ from robot_lab.tasks.manager_based.locomotion.velocity.velocity_env_cfg import L
 ##
 # Pre-defined configs
 ##
-from robot_lab.assets.cyborg_hp import CYBORG_HALF_PED_CFG  # isort: skip
+from robot_lab.assets.cyborg_hp import CYBORG_HALF_PED_CFG, CYBORG_HALF_PED_ACTION_SCALE  # isort: skip
 
 
 @configclass
@@ -34,20 +34,15 @@ class CyborgHPRoughEnvCfg(LocomotionVelocityRoughEnvCfg):
         self.observations.policy.joint_vel.scale = 0.05
         self.observations.policy.base_lin_vel = None
         self.observations.policy.height_scan = None
+        self.observations.policy.phase.params["recovery_tilt_threshold"] = None
         self.observations.critic.height_scan = None
+        self.observations.critic.phase.params["recovery_tilt_threshold"] = None
 
         # ------------------------------Actions------------------------------
         self.actions.joint_pos = mdp.DelayedJointPositionActionCfg(
             asset_name="robot", 
             joint_names=[".*"], 
-            scale={
-                "J_hip_.*_roll": 0.4,
-                "J_hip_.*_yaw": 0.35,
-                "J_hip_.*_pitch": 0.35,
-                "J_knee_.*_pitch": 0.35,
-                "J_ankle_.*_pitch": 0.35,
-                "J_ankle_.*_roll": 0.35,
-            },
+            scale=CYBORG_HALF_PED_ACTION_SCALE,
             use_default_offset=True, 
             clip={".*": (-100.0, 100.0)}, 
             preserve_order=True,
@@ -89,7 +84,7 @@ class CyborgHPRoughEnvCfg(LocomotionVelocityRoughEnvCfg):
         self.rewards.joint_vel_limits.weight = 0
         self.rewards.joint_power.weight = 0
         self.rewards.stand_still.weight = -1.0
-        self.rewards.stand_still.params["recovery_tilt_threshold"] = 0.17
+        self.rewards.stand_still.params["recovery_tilt_threshold"] = None
         # joint_pos_penalty 已关闭（weight 0）：运动时与 phase_ref_joint_pos 对抗，静止时与 stand_still 重复
         self.rewards.joint_mirror.weight = 0
         self.rewards.joint_mirror.params["mirror_joints"] = [["J_.*_l_.*", "J_.*_r_.*"]]
@@ -106,9 +101,10 @@ class CyborgHPRoughEnvCfg(LocomotionVelocityRoughEnvCfg):
         self.rewards.contact_forces.params["sensor_cfg"].body_names = [self.foot_link_name]
 
         # Velocity-tracking rewards
-        self.rewards.track_lin_vel_xy_exp.weight = 3.0
-        self.rewards.track_lin_vel_xy_exp.func = mdp.track_lin_vel_xy_yaw_frame_exp
-        self.rewards.track_ang_vel_z_exp.weight = 3.0
+        self.rewards.track_lin_vel_xy_exp.weight = 0
+        self.rewards.track_lin_vel_x_exp.weight = 1.0
+        self.rewards.track_lin_vel_y_exp.weight = 0.5
+        self.rewards.track_ang_vel_z_exp.weight = 1.0
         self.rewards.track_ang_vel_z_exp.func = mdp.track_ang_vel_z_world_exp
 
         # Others
@@ -141,12 +137,12 @@ class CyborgHPRoughEnvCfg(LocomotionVelocityRoughEnvCfg):
         self.rewards.feet_height_body.params["asset_cfg"].body_names = [self.foot_link_name]
         self.rewards.upward.weight = 1.0
         self.rewards.periodic_contact_mismatch.weight = -2.0
-        self.rewards.periodic_contact_mismatch.params["recovery_tilt_threshold"] = 0.17
+        self.rewards.periodic_contact_mismatch.params["recovery_tilt_threshold"] = None
         self.rewards.periodic_contact_mismatch.params["sensor_cfg"].body_names = ["ankle_l_roll_link", "ankle_r_roll_link"]
         self.rewards.periodic_contact_mismatch.params["sensor_cfg"].preserve_order = True
         # phase_feet_height 已关闭（weight 0）：与 phase_ref_joint_pos 同一摆动窗口双重约束，冗余
         self.rewards.phase_ref_joint_pos.weight = 2.0
-        self.rewards.phase_ref_joint_pos.params["recovery_tilt_threshold"] = 0.17
+        self.rewards.phase_ref_joint_pos.params["recovery_tilt_threshold"] = None
         # 脚踝 pitch/roll 全程保持 default（0 振幅，不参与摆动相）
         self.rewards.phase_ref_joint_pos.params["ankle_scale"] = 0.0
         self.rewards.phase_ref_joint_pos.params["ankle_roll_scale"] = 0.0
@@ -166,9 +162,9 @@ class CyborgHPRoughEnvCfg(LocomotionVelocityRoughEnvCfg):
         self.commands.base_velocity.resampling_time_range = (10.0, 10.0)
         self.commands.base_velocity.rel_standing_envs = 0.1
         self.commands.base_velocity.heading_command = False
-        self.commands.base_velocity.ranges.lin_vel_x = (-0.6, 0.6)
-        self.commands.base_velocity.ranges.lin_vel_y = (-0.4, 0.4)
-        self.commands.base_velocity.ranges.ang_vel_z = (-0.6, 0.6)
+        self.commands.base_velocity.ranges.lin_vel_x = (-0.5, 0.5)
+        self.commands.base_velocity.ranges.lin_vel_y = (-0.15, 0.15)
+        self.commands.base_velocity.ranges.ang_vel_z = (-0.3, 0.3)
 
         # ------------------------------Episode------------------------------
         self.episode_length_s = 30.0
