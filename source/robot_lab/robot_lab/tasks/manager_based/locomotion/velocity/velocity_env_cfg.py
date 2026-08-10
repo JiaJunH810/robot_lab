@@ -666,16 +666,6 @@ class RewardsCfg:
         },
     )
 
-    feet_landing_velocity = RewTerm(
-        func=mdp.feet_landing_velocity,
-        weight=0.0,
-        params={
-            "threshold": 0.1,
-            "sensor_cfg": SceneEntityCfg("contact_forces", body_names=""),
-            "asset_cfg": SceneEntityCfg("robot", body_names=""),
-        },
-    )
-
     feet_slide = RewTerm(
         func=mdp.feet_slide,
         weight=0.0,
@@ -718,12 +708,10 @@ class RewardsCfg:
             "knee_scale": 0.52,
             "ankle_scale": 0.26,
             "ankle_roll_scale": 0.0,
-            "hip_yaw_scale": 0.0,
             "command_threshold": 0.1,
             "asset_cfg": SceneEntityCfg(
                 "robot",
                 joint_names=[
-                    "J_hip_.*_yaw",
                     "J_hip_.*_pitch",
                     "J_knee_.*_pitch",
                     "J_ankle_.*_pitch",
