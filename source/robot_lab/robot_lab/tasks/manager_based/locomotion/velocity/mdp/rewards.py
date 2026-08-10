@@ -162,7 +162,7 @@ def periodic_biped_contact_mismatch(
 
     # 接触传感器中的顺序必须确认是 [left, right]
     forces = contact_sensor.data.net_forces_w_history[:, :, sensor_cfg.body_ids, :]
-    actual_contact = (torch.linalg.norm(forces, dim=-1).max(dim=1)[0] > force_threshold).float()
+    actual_contact = torch.linalg.norm(forces, dim=-1).max(dim=1)[0] > force_threshold
 
     # phase:
     # [0.00, 0.05) 双支撑
@@ -172,7 +172,7 @@ def periodic_biped_contact_mismatch(
     # [0.95, 1.00) 双支撑
     left_should_contact = ((phase < 0.55) | (phase >= 0.95))
     right_should_contact = ((phase < 0.05)| (phase >= 0.45))
-    desired_contact = torch.stack([left_should_contact,right_should_contact],dim=1).float()
+    desired_contact = torch.stack([left_should_contact,right_should_contact],dim=1)
 
     phase_active = _phase_active(env, command_name, command_threshold, recovery_tilt_threshold)
     # 静止时不执行周期踏步，要求双脚接触
@@ -181,11 +181,11 @@ def periodic_biped_contact_mismatch(
         desired_contact,
         torch.ones_like(desired_contact),
     )
-    stance_miss = desired_contact * (1.0 - actual_contact)
-    swing_contact = (1.0 - desired_contact) * actual_contact
-    reward = (2.0 * stance_miss + swing_contact).mean(dim=1)
+    # EngineAI 式双向约束（zqsa01 feet_contact_number）：接触与相位期望匹配 +1 / 不匹配 -0.3。
+    # 正激励驱动策略主动对齐相位（原版只罚不奖，策略可贴窗口边缘规避）
+    reward = torch.where(actual_contact == desired_contact, 1.0, -0.3)
 
-    return reward
+    return torch.mean(reward, dim=1)
 
 
 def wheel_vel_penalty(
@@ -663,16 +663,18 @@ def phase_ref_joint_pos(
     knee_scale: float,
     ankle_scale: float,
     ankle_roll_scale: float = 0.0,
+    hip_yaw_scale: float = 0.0,
     command_threshold: float = 0.1,
     recovery_tilt_threshold: float | None = None,
 ) -> torch.Tensor:
     """Reward tracking a sinusoidal gait reference on the sagittal joints.
 
     The joint order in asset_cfg must be
-    [hip_l, hip_r, knee_l, knee_r, ankle_p_l, ankle_p_r, ankle_r_l, ankle_r_r].
+    [hip_y_l, hip_y_r, hip_p_l, hip_p_r, knee_l, knee_r,
+     ankle_p_l, ankle_p_r, ankle_r_l, ankle_r_r].
     Left/right pitch axes are mirrored: the swing offset is applied to both sides,
     with a +1/-1 sign flip per side so the swing leg always moves toward flexion.
-    Ankle joints keep scale 0 to stay at the default pose throughout the gait.
+    hip_yaw and ankle joints keep scale 0 to stay at the default pose throughout the gait.
     """
     asset: Articulation = env.scene[asset_cfg.name]
 
@@ -688,12 +690,11 @@ def phase_ref_joint_pos(
     swing_r = torch.sin(torch.pi * right_progress).square()
 
     # Reference = default pose + swing offsets on the sagittal joints.
-    offsets = torch.stack([swing_l, swing_r] * 4, dim=1)  # (N, 8)
-    signs = torch.tensor(
-        [1.0, -1.0, 1.0, -1.0, 1.0, -1.0, 1.0, -1.0], device=env.device
-    )
+    offsets = torch.stack([swing_l, swing_r] * 5, dim=1)  # (N, 10)
+    signs = torch.tensor([1.0, -1.0] * 5, device=env.device)
     scales = torch.tensor(
         [
+            hip_yaw_scale, hip_yaw_scale,
             hip_scale, hip_scale,
             knee_scale, knee_scale,
             ankle_scale, ankle_scale,
@@ -708,8 +709,41 @@ def phase_ref_joint_pos(
     error_norm = torch.linalg.norm(diff, dim=1)
     reward = torch.exp(-2.0 * error_norm) - 0.2 * error_norm.clamp(max=0.5)
 
-    phase_active = _phase_active(env, command_name, command_threshold, recovery_tilt_threshold)
-    return reward * phase_active.float()
+    # 仅 moving 门控（有命令才给摆动奖励）；去掉 recovery 倾斜激活——
+    # 此前站立时倾斜>0.17 会激活摆动奖励 + 关闭 stand_still，后期策略用倾斜刷分
+    # 导致站立乱步。观测侧相位仍恒定输入（observations.phase），站立时策略
+    # 看到真实相位但无摆动奖励动力，由 stand_still 主导
+    command = env.command_manager.get_command(command_name)
+    moving = (
+        (torch.linalg.norm(command[:, :2], dim=1) > command_threshold)
+        | (torch.abs(command[:, 2]) > command_threshold)
+    )
+    return reward * moving.float()
+
+def feet_landing_velocity(
+    env: ManagerBasedRLEnv,
+    sensor_cfg: SceneEntityCfg,
+    asset_cfg: SceneEntityCfg,
+    threshold: float = 0.1,
+) -> torch.Tensor:
+    """Penalize foot vertical velocity at the touchdown instant.
+
+    触地沿帧（接触 无→有）惩罚脚垂直速度超过 threshold 的部分。
+    直接对应触地 vz 指标——后期策略收敛到"重砸"局部最优就是因为奖励景观
+    没有触地瞬间维度；本项在奖励里挖出该维度，vz 与指标对齐。
+    """
+    contact_sensor: ContactSensor = env.scene.sensors[sensor_cfg.name]
+    # 触地沿：这一帧刚从腾空变为接触的脚
+    first_contact = contact_sensor.compute_first_contact(env.step_dt)[:, sensor_cfg.body_ids]
+
+    asset: RigidObject = env.scene[asset_cfg.name]
+    vz = torch.abs(asset.data.body_lin_vel_w[:, asset_cfg.body_ids, 2])
+    # 只罚超过 threshold 的部分（正常轻放不罚）
+    penalty = (vz - threshold).clip(min=0.0)
+    reward = torch.sum(penalty * first_contact.float(), dim=1)
+    reward *= torch.clamp(-env.scene["robot"].data.projected_gravity_b[:, 2], 0, 0.7) / 0.7
+    return reward
+
 
 def feet_slide(
     env: ManagerBasedRLEnv, sensor_cfg: SceneEntityCfg, asset_cfg: SceneEntityCfg = SceneEntityCfg("robot")

@@ -119,6 +119,12 @@ class CyborgHPRoughEnvCfg(LocomotionVelocityRoughEnvCfg):
         self.rewards.feet_air_time_variance.params["sensor_cfg"].body_names = [self.foot_link_name]
         # feet_slide 权重对齐 EngineAI（-0.1），实现已对齐（世界系 + √ 核 + 垂直力>5N）
         self.rewards.feet_slide.weight = -0.1
+        # 触地瞬间垂直速度惩罚（触地沿帧罚 (|vz|-0.1).clip(0)）：
+        # 奖励景观里唯一的"触地瞬间"维度，防止后期收敛到重砸局部最优。
+        # 0.5 m/s 触地罚 0.4/脚 ×2.0；ENCOS 基准 vz 0.03-0.06 < 阈值不罚
+        self.rewards.feet_landing_velocity.weight = -2.0
+        self.rewards.feet_landing_velocity.params["sensor_cfg"].body_names = [self.foot_link_name]
+        self.rewards.feet_landing_velocity.params["asset_cfg"].body_names = [self.foot_link_name]
         self.rewards.feet_slide.params["sensor_cfg"].body_names = [self.foot_link_name]
         self.rewards.feet_slide.params["asset_cfg"].body_names = [self.foot_link_name]
         # 步宽约束（防交叉脚）：期望两脚 y 距离 0.31 m（default 位姿步宽），body 顺序须为 [左, 右]
@@ -134,8 +140,10 @@ class CyborgHPRoughEnvCfg(LocomotionVelocityRoughEnvCfg):
         self.rewards.feet_height_body.params["target_height"] = -0.2
         self.rewards.feet_height_body.params["asset_cfg"].body_names = [self.foot_link_name]
         self.rewards.upward.weight = 1.0
-        self.rewards.periodic_contact_mismatch.weight = -2.0
-        self.rewards.periodic_contact_mismatch.params["recovery_tilt_threshold"] = 0.17
+        # EngineAI 式双向（匹配 +1 / 不匹配 -0.3），weight 对齐 EN feet_contact_number=1.4；
+        # recovery 倾斜已去掉（仅 moving 激活）：与 phase_ref 一致，消除"站立倾斜切换
+        # 相位接触要求"的 hack 杠杆；0 命令时恒定要求双脚着地
+        self.rewards.periodic_contact_mismatch.weight = 1.4
         self.rewards.periodic_contact_mismatch.params["sensor_cfg"].body_names = ["ankle_l_roll_link", "ankle_r_roll_link"]
         self.rewards.periodic_contact_mismatch.params["sensor_cfg"].preserve_order = True
         # phase_feet_height 已关闭（weight 0）：与 phase_ref_joint_pos 同一摆动窗口双重约束，冗余

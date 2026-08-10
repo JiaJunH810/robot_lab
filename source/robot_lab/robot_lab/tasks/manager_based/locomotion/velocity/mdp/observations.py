@@ -70,20 +70,7 @@ def phase(
 
     phase = env.episode_length_buf[:, None] * env.step_dt / cycle_time
     phase_tensor = torch.cat([torch.sin(2 * torch.pi * phase), torch.cos(2 * torch.pi * phase),],dim=-1)
-    command = env.command_manager.get_command(command_name)
-    moving = (
-        (torch.linalg.norm(command[:, :2], dim=1) > command_threshold)
-        | (torch.abs(command[:, 2]) > command_threshold)
-    )
 
-    if action_name is None:
-        gravity = env.scene["robot"].data.projected_gravity_b
-    else:
-        action = env.action_manager.get_term(action_name)
-        gravity = action.delayed_imu_obs[:, 3:]
-
-    tilt = torch.linalg.norm(gravity[:, :2], dim=1)
-    recovering = tilt > recovery_tilt_threshold
-    phase_active = moving | recovering
-
-    return phase_tensor * phase_active.unsqueeze(-1).to(phase_tensor.dtype)
+    # 对齐 EngineAI（zqsa01 compute_observations）：相位观测恒定输入（0 命令也给出
+    # 真实 sin/cos），不置 0。站立行为由奖励门控决定，观测保持与真实相位一致
+    return phase_tensor
