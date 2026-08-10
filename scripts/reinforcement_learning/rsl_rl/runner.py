@@ -92,8 +92,8 @@ class Runner(OnPolicyRunner):
             )
 
             # Save model
-            # if self.logger.writer is not None and it % self.cfg["save_interval"] == 0:
-            #     self.save(os.path.join(self.logger.log_dir, f"model_{it}.pt"))  # type: ignore
+            if self.logger.writer is not None and it % self.cfg["save_interval"] == 0:
+                self.save(os.path.join(self.logger.log_dir, f"model_{it}.pt"))  # type: ignore
             
             if len(self.logger.lenbuffer) > 0:
                 mean_len = statistics.mean(self.logger.lenbuffer)
