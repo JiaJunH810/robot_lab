@@ -143,8 +143,8 @@ class CyborgHPRoughEnvCfg(LocomotionVelocityRoughEnvCfg):
         # phase_feet_height 已关闭（weight 0）：与 phase_ref_joint_pos 同一摆动窗口双重约束，冗余
         self.rewards.phase_ref_joint_pos.weight = 2.0
         self.rewards.phase_ref_joint_pos.params["recovery_tilt_threshold"] = None
-        # 脚踝 pitch/roll 全程保持 default（0 振幅，不参与摆动相）
-        self.rewards.phase_ref_joint_pos.params["ankle_scale"] = 0.0
+        # 脚踝 pitch 跟随摆动相，roll 保持 default。
+        self.rewards.phase_ref_joint_pos.params["ankle_scale"] = 0.15
         self.rewards.phase_ref_joint_pos.params["ankle_roll_scale"] = 0.0
 
         # If the weight of rewards is 0, set rewards to None

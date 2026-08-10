@@ -703,10 +703,13 @@ def phase_ref_joint_pos(
     phase = env.episode_length_buf.float() * env.step_dt / cycle_time
     phase = torch.remainder(phase, 1.0)
 
-    # Left leg swings during [0.55, 0.95) (sin < 0), right leg during [0.05, 0.45) (sin > 0).
-    sin_pos = torch.sin(2.0 * torch.pi * phase)
-    swing_l = torch.clamp(-sin_pos, min=0.0)
-    swing_r = torch.clamp(sin_pos, min=0.0)
+    # Left leg swings during [0.55, 0.95), right leg during [0.05, 0.45).
+    # sin²(π·progress) 两端斜率 = 0：抬起/落下平缓，避免 |sin| 在摆动相末端
+    # 以最快速度落回 default 导致脚砸地
+    left_progress = torch.clamp((phase - 0.55) / 0.40, min=0.0, max=1.0)
+    right_progress = torch.clamp((phase - 0.05) / 0.40, min=0.0, max=1.0)
+    swing_l = torch.sin(torch.pi * left_progress).square()
+    swing_r = torch.sin(torch.pi * right_progress).square()
 
     # Reference = default pose + swing offsets on the sagittal joints.
     offsets = torch.stack([swing_l, swing_r] * 4, dim=1)  # (N, 8)
