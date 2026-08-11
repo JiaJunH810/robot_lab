@@ -9,7 +9,7 @@ from robot_lab.tasks.manager_based.locomotion.velocity.velocity_env_cfg import L
 ##
 # Pre-defined configs
 ##
-from robot_lab.assets.cyborg_hp import CYBORG_HALF_PED_CFG, CYBORG_HALF_PED_ACTION_SCALE  # isort: skip
+from robot_lab.assets.cyborg_hp import CYBORG_HALF_PED_CFG  # isort: skip
 
 
 @configclass
@@ -42,7 +42,14 @@ class CyborgHPRoughEnvCfg(LocomotionVelocityRoughEnvCfg):
         self.actions.joint_pos = mdp.DelayedJointPositionActionCfg(
             asset_name="robot", 
             joint_names=[".*"], 
-            scale=CYBORG_HALF_PED_ACTION_SCALE,
+            scale={
+                "J_hip_.*_roll": 0.4,
+                "J_hip_.*_yaw": 0.35,
+                "J_hip_.*_pitch": 0.35,
+                "J_knee_.*_pitch": 0.35,
+                "J_ankle_.*_pitch": 0.35,
+                "J_ankle_.*_roll": 0.35,
+            },
             use_default_offset=True, 
             clip={".*": (-100.0, 100.0)}, 
             preserve_order=True,
