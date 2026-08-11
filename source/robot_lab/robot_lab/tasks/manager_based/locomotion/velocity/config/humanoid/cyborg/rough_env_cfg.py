@@ -90,7 +90,7 @@ class CyborgHPRoughEnvCfg(LocomotionVelocityRoughEnvCfg):
         self.rewards.joint_pos_limits.weight = -0.5
         self.rewards.joint_vel_limits.weight = 0
         self.rewards.joint_power.weight = 0
-        self.rewards.stand_still.weight = -2.0
+        self.rewards.stand_still.weight = -1.0
         self.rewards.stand_still.params["recovery_tilt_threshold"] = None
         # joint_pos_penalty 已关闭（weight 0）：运动时与 phase_ref_joint_pos 对抗，静止时与 stand_still 重复
         self.rewards.joint_mirror.weight = 0
@@ -105,7 +105,7 @@ class CyborgHPRoughEnvCfg(LocomotionVelocityRoughEnvCfg):
         self.rewards.undesired_contacts.weight = 0
         self.rewards.undesired_contacts.params["sensor_cfg"].body_names = [f"^(?!.*{self.foot_link_name}).*"]
         self.rewards.contact_forces.weight = -0.02
-        self.rewards.contact_forces.params["threshold"] = 1200.0
+        self.rewards.contact_forces.params["threshold"] = 2000
         self.rewards.contact_forces.params["sensor_cfg"].body_names = [self.foot_link_name]
 
         # Velocity-tracking rewards
