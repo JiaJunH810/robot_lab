@@ -53,9 +53,9 @@ class CyborgHPRoughEnvCfg(LocomotionVelocityRoughEnvCfg):
             use_default_offset=True, 
             clip={".*": (-100.0, 100.0)}, 
             preserve_order=True,
-            delay_steps=(1, 10),
-            joint_obs_delay_steps=(1, 10),
-            imu_obs_delay_steps=(1, 10)
+            delay_steps=(1, 20),
+            joint_obs_delay_steps=(1, 20),
+            imu_obs_delay_steps=(1, 20)
         )
 
         # ------------------------------Events------------------------------
@@ -71,8 +71,10 @@ class CyborgHPRoughEnvCfg(LocomotionVelocityRoughEnvCfg):
 
         # Root penalties
         self.rewards.lin_vel_z_l2.weight = 0
-        self.rewards.ang_vel_xy_l2.weight = -0.1
-        self.rewards.flat_orientation_l2.weight = -0.2
+        self.rewards.ang_vel_xy_l2.weight = 0
+        self.rewards.vel_mismatch_exp.weight = 0.5
+        self.rewards.flat_orientation_l2.func = mdp.orientation_exp
+        self.rewards.flat_orientation_l2.weight = 1.0
         self.rewards.base_height_l2.weight = 0
         self.rewards.base_height_l2.params["target_height"] = 0
         self.rewards.base_height_l2.params["asset_cfg"].body_names = [self.base_link_name]
@@ -97,7 +99,8 @@ class CyborgHPRoughEnvCfg(LocomotionVelocityRoughEnvCfg):
         self.rewards.joint_mirror.params["mirror_joints"] = [["J_.*_l_.*", "J_.*_r_.*"]]
 
         # Action penalties
-        self.rewards.action_rate_l2.weight = -0.05
+        self.rewards.action_rate_l2.weight = 0
+        self.rewards.action_smoothness.weight = -0.003
         self.rewards.action_mirror.weight = 0
         self.rewards.action_mirror.params["mirror_joints"] = [["J_.*_l_.*", "J_.*_r_.*"]]
 
@@ -143,7 +146,7 @@ class CyborgHPRoughEnvCfg(LocomotionVelocityRoughEnvCfg):
         self.rewards.feet_height_body.weight = 0
         self.rewards.feet_height_body.params["target_height"] = -0.2
         self.rewards.feet_height_body.params["asset_cfg"].body_names = [self.foot_link_name]
-        self.rewards.upward.weight = 1.0
+        self.rewards.upward.weight = 0
         self.rewards.periodic_contact_mismatch.weight = -2.0
         self.rewards.periodic_contact_mismatch.params["recovery_tilt_threshold"] = None
         self.rewards.periodic_contact_mismatch.params["sensor_cfg"].body_names = ["ankle_l_roll_link", "ankle_r_roll_link"]

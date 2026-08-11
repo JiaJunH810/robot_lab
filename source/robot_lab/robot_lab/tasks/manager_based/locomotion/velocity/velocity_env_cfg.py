@@ -360,8 +360,8 @@ class EventCfg:
         mode="reset",
         params={
             "asset_cfg": SceneEntityCfg("robot", joint_names=".*"),
-            "stiffness_distribution_params": (0.8, 1.2),
-            "damping_distribution_params": (0.8, 1.2),
+            "stiffness_distribution_params": (0.5, 1.5),
+            "damping_distribution_params": (0.5, 1.5),
             "operation": "scale",
             "distribution": "uniform",
         },
@@ -372,7 +372,7 @@ class EventCfg:
         mode="reset",
         params={
             "asset_cfg": SceneEntityCfg("robot", joint_names=".*"),
-            "friction_distribution_params": (0.8, 1.2),
+            "friction_distribution_params": (0.7, 1.3),
             "operation": "scale",
             "distribution": "uniform",
         },
@@ -430,7 +430,7 @@ class EventCfg:
         mode="reset",
         params={
             "asset_cfg": SceneEntityCfg("robot", joint_names=".*"),
-            "armature_distribution_params": (0.8, 1.2),
+            "armature_distribution_params": (0.5, 1.5),
             "operation": "scale",
             "distribution": "uniform",
         },
@@ -447,6 +447,7 @@ class RewardsCfg:
     # Root penalties
     lin_vel_z_l2 = RewTerm(func=mdp.lin_vel_z_l2, weight=0.0)
     ang_vel_xy_l2 = RewTerm(func=mdp.ang_vel_xy_l2, weight=0.0)
+    vel_mismatch_exp = RewTerm(func=mdp.vel_mismatch_exp, weight=0.0)
     flat_orientation_l2 = RewTerm(func=mdp.flat_orientation_l2, weight=0.0)
     base_height_l2 = RewTerm(
         func=mdp.base_height_l2,
@@ -581,8 +582,7 @@ class RewardsCfg:
         params={"asset_cfg": SceneEntityCfg("robot", joint_names=".*")},
     )
     action_rate_l2 = RewTerm(func=mdp.action_rate_l2, weight=0.0)
-    # smoothness_1 = RewTerm(func=mdp.smoothness_1, weight=0.0)  # Same as action_rate_l2
-    # smoothness_2 = RewTerm(func=mdp.smoothness_2, weight=0.0)  # Unvaliable now
+    action_smoothness = RewTerm(func=mdp.ActionSmoothnessPenalty, weight=0.0)
 
     # Contact sensor
     undesired_contacts = RewTerm(

@@ -765,22 +765,26 @@ def feet_slide(
     return reward
 
 
-# def smoothness_1(env: ManagerBasedRLEnv) -> torch.Tensor:
-#     # Penalize changes in actions
-#     diff = torch.square(env.action_manager.action - env.action_manager.prev_action)
-#     diff = diff * (env.action_manager.prev_action[:, :] != 0)  # ignore first step
-#     return torch.sum(diff, dim=1)
+class ActionSmoothnessPenalty(ManagerTermBase):
+    """EngineAI action smoothness penalty with first- and second-order differences."""
 
+    def __init__(self, cfg: RewTerm, env: ManagerBasedRLEnv):
+        super().__init__(cfg, env)
+        self._prev_prev_action = torch.zeros_like(env.action_manager.action)
 
-# def smoothness_2(env: ManagerBasedRLEnv) -> torch.Tensor:
-#     # Penalize changes in actions
-#     diff = torch.square(
-#         env.action_manager.action - 2 * env.action_manager.prev_action
-#         + env.action_manager.prev_prev_action
-#     )
-#     diff = diff * (env.action_manager.prev_action[:, :] != 0)  # ignore first step
-#     diff = diff * (env.action_manager.prev_prev_action[:, :] != 0)  # ignore second step
-#     return torch.sum(diff, dim=1)
+    def __call__(self, env: ManagerBasedRLEnv) -> torch.Tensor:
+        action = env.action_manager.action
+        prev_action = env.action_manager.prev_action
+        first_order = torch.sum(torch.square(action - prev_action), dim=1)
+        second_order = torch.sum(torch.square(action - 2.0 * prev_action + self._prev_prev_action), dim=1)
+        magnitude = 0.05 * torch.sum(torch.abs(action), dim=1)
+        self._prev_prev_action[:] = prev_action
+        return first_order + second_order + magnitude
+
+    def reset(self, env_ids=None):
+        if env_ids is None:
+            env_ids = slice(None)
+        self._prev_prev_action[env_ids] = 0.0
 
 
 def upward(env: ManagerBasedRLEnv, asset_cfg: SceneEntityCfg = SceneEntityCfg("robot")) -> torch.Tensor:
@@ -840,6 +844,14 @@ def ang_vel_xy_l2(env: ManagerBasedRLEnv, asset_cfg: SceneEntityCfg = SceneEntit
     return reward
 
 
+def vel_mismatch_exp(env: ManagerBasedRLEnv, asset_cfg: SceneEntityCfg = SceneEntityCfg("robot")) -> torch.Tensor:
+    """Reward low vertical base velocity and low roll/pitch angular velocity."""
+    asset: RigidObject = env.scene[asset_cfg.name]
+    lin_reward = torch.exp(-10.0 * torch.square(asset.data.root_lin_vel_b[:, 2]))
+    ang_reward = torch.exp(-5.0 * torch.linalg.norm(asset.data.root_ang_vel_b[:, :2], dim=1))
+    return 0.5 * (lin_reward + ang_reward)
+
+
 def undesired_contacts(env: ManagerBasedRLEnv, threshold: float, sensor_cfg: SceneEntityCfg) -> torch.Tensor:
     """Penalize undesired contacts as the number of violations that are above a threshold."""
     # extract the used quantities (to enable type-hinting)
@@ -863,3 +875,12 @@ def flat_orientation_l2(env: ManagerBasedRLEnv, asset_cfg: SceneEntityCfg = Scen
     reward = torch.sum(torch.square(asset.data.projected_gravity_b[:, :2]), dim=1)
     reward *= torch.clamp(-env.scene["robot"].data.projected_gravity_b[:, 2], 0, 0.7) / 0.7
     return reward
+
+
+def orientation_exp(env: ManagerBasedRLEnv, asset_cfg: SceneEntityCfg = SceneEntityCfg("robot")) -> torch.Tensor:
+    """Reward a level base using the EngineAI orientation kernels."""
+    asset: RigidObject = env.scene[asset_cfg.name]
+    roll, pitch, _ = math_utils.euler_xyz_from_quat(asset.data.root_quat_w)
+    euler_reward = torch.exp(-10.0 * (torch.abs(roll) + torch.abs(pitch)))
+    gravity_reward = torch.exp(-20.0 * torch.linalg.norm(asset.data.projected_gravity_b[:, :2], dim=1))
+    return 0.5 * (euler_reward + gravity_reward)
