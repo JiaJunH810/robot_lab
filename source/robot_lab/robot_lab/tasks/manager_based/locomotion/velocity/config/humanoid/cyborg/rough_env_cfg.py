@@ -104,7 +104,7 @@ class CyborgHPRoughEnvCfg(LocomotionVelocityRoughEnvCfg):
         # Contact sensor
         self.rewards.undesired_contacts.weight = 0
         self.rewards.undesired_contacts.params["sensor_cfg"].body_names = [f"^(?!.*{self.foot_link_name}).*"]
-        self.rewards.contact_forces.weight = -0.02
+        self.rewards.contact_forces.weight = -5.0e-4
         self.rewards.contact_forces.params["threshold"] = 2000
         self.rewards.contact_forces.params["sensor_cfg"].body_names = [self.foot_link_name]
 
