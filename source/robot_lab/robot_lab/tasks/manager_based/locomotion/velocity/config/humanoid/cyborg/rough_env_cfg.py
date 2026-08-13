@@ -51,9 +51,9 @@ class CyborgHPRoughEnvCfg(LocomotionVelocityRoughEnvCfg):
             use_default_offset=True, 
             clip={".*": (-100.0, 100.0)}, 
             preserve_order=True,
-            delay_steps=(1, 20),
-            joint_obs_delay_steps=(1, 20),
-            imu_obs_delay_steps=(1, 20)
+            delay_steps=(1, 10),
+            joint_obs_delay_steps=(1, 10),
+            imu_obs_delay_steps=(1, 10)
         )
 
         # ------------------------------Events------------------------------
@@ -72,7 +72,8 @@ class CyborgHPRoughEnvCfg(LocomotionVelocityRoughEnvCfg):
         self.rewards.ang_vel_xy_l2.weight = 0
         self.rewards.vel_mismatch_exp.weight = 0.5
         self.rewards.flat_orientation_l2.func = mdp.orientation_exp
-        self.rewards.flat_orientation_l2.weight = 1.0
+        self.rewards.flat_orientation_l2.weight = 0.5
+        self.rewards.flat_orientation_l2.params["tolerance"] = 0.05
         self.rewards.base_height_l2.weight = 0
         self.rewards.base_height_l2.params["target_height"] = 0
         self.rewards.base_height_l2.params["asset_cfg"].body_names = [self.base_link_name]

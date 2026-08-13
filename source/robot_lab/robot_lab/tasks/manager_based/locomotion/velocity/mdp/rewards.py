@@ -868,10 +868,13 @@ def flat_orientation_l2(env: ManagerBasedRLEnv, asset_cfg: SceneEntityCfg = Scen
     return reward
 
 
-def orientation_exp(env: ManagerBasedRLEnv, asset_cfg: SceneEntityCfg = SceneEntityCfg("robot")) -> torch.Tensor:
-    """Reward a level base using the EngineAI orientation kernels."""
+def orientation_exp(
+    env: ManagerBasedRLEnv,
+    tolerance: float = 0.05,
+    asset_cfg: SceneEntityCfg = SceneEntityCfg("robot"),
+) -> torch.Tensor:
+    """Reward a stable base orientation with a small tilt tolerance."""
     asset: RigidObject = env.scene[asset_cfg.name]
-    roll, pitch, _ = math_utils.euler_xyz_from_quat(asset.data.root_quat_w)
-    euler_reward = torch.exp(-10.0 * (torch.abs(roll) + torch.abs(pitch)))
-    gravity_reward = torch.exp(-20.0 * torch.linalg.norm(asset.data.projected_gravity_b[:, :2], dim=1))
-    return 0.5 * (euler_reward + gravity_reward)
+    tilt = torch.linalg.norm(asset.data.projected_gravity_b[:, :2], dim=1)
+    tilt_error = torch.clamp(tilt - tolerance, min=0.0)
+    return torch.exp(-10.0 * tilt_error)
