@@ -868,7 +868,7 @@ def vel_mismatch_exp(env: ManagerBasedRLEnv, asset_cfg: SceneEntityCfg = SceneEn
     """Reward low vertical base velocity and low roll/pitch angular velocity."""
     asset: RigidObject = env.scene[asset_cfg.name]
     lin_reward = torch.exp(-10.0 * torch.square(asset.data.root_lin_vel_b[:, 2]))
-    ang_reward = torch.exp(-5.0 * torch.linalg.norm(asset.data.root_ang_vel_b[:, :2], dim=1))
+    ang_reward = torch.exp(-7.5 * torch.linalg.norm(asset.data.root_ang_vel_b[:, :2], dim=1))
     return 0.5 * (lin_reward + ang_reward)
 
 
