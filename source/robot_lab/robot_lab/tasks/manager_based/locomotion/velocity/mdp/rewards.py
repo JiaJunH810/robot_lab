@@ -778,6 +778,35 @@ class ActionSmoothnessPenalty(ManagerTermBase):
         self._prev_prev_action[env_ids] = 0.0
 
 
+class BaseAccelerationReward(ManagerTermBase):
+    """Reward small changes in the base linear and angular velocities."""
+
+    def __init__(self, cfg: RewTerm, env: ManagerBasedRLEnv):
+        super().__init__(cfg, env)
+        self._last_root_vel = torch.zeros(env.num_envs, 6, device=env.device)
+        self._has_previous = torch.zeros(env.num_envs, dtype=torch.bool, device=env.device)
+
+    def __call__(
+        self,
+        env: ManagerBasedRLEnv,
+        scale: float,
+        asset_cfg: SceneEntityCfg = SceneEntityCfg("robot"),
+    ) -> torch.Tensor:
+        asset: Articulation = env.scene[asset_cfg.name]
+        root_vel = torch.cat((asset.data.root_lin_vel_w, asset.data.root_ang_vel_w), dim=1)
+        reward = torch.exp(-scale * torch.linalg.norm(self._last_root_vel - root_vel, dim=1))
+        reward = torch.where(self._has_previous, reward, torch.ones_like(reward))
+        self._last_root_vel[:] = root_vel
+        self._has_previous[:] = True
+        return reward
+
+    def reset(self, env_ids=None):
+        if env_ids is None:
+            env_ids = slice(None)
+        self._last_root_vel[env_ids] = 0.0
+        self._has_previous[env_ids] = False
+
+
 def upward(env: ManagerBasedRLEnv, asset_cfg: SceneEntityCfg = SceneEntityCfg("robot")) -> torch.Tensor:
     """Penalize z-axis base linear velocity using L2 squared kernel."""
     # extract the used quantities (to enable type-hinting)
