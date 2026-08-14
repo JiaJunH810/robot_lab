@@ -74,7 +74,7 @@ class CyborgHPRoughEnvCfg(LocomotionVelocityRoughEnvCfg):
         self.rewards.base_acc.weight = 0.2
         self.rewards.flat_orientation_l2.func = mdp.orientation_exp
         self.rewards.flat_orientation_l2.weight = 0.5
-        self.rewards.flat_orientation_l2.params["tolerance"] = 0.05
+        self.rewards.flat_orientation_l2.params["tolerance"] = 0.095846
         self.rewards.base_height_l2.weight = 0
         self.rewards.base_height_l2.params["target_height"] = 0
         self.rewards.base_height_l2.params["asset_cfg"].body_names = [self.base_link_name]
