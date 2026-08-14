@@ -134,7 +134,7 @@ class CyborgHPRoughEnvCfg(LocomotionVelocityRoughEnvCfg):
         self.rewards.feet_slide.weight = -0.2
         self.rewards.feet_slide.params["sensor_cfg"].body_names = [self.foot_link_name]
         self.rewards.feet_slide.params["asset_cfg"].body_names = [self.foot_link_name]
-        self.rewards.feet_orientation_l2.weight = -1.0
+        self.rewards.feet_orientation_l2.weight = -5.0
         self.rewards.feet_orientation_l2.params["asset_cfg"].body_names = [self.foot_link_name]
         # 步宽约束（防交叉脚）：期望两脚 y 距离 0.31 m（default 位姿步宽），body 顺序须为 [左, 右]
         self.rewards.feet_distance_y_exp.weight = 0.5
