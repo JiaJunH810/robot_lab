@@ -755,7 +755,7 @@ def feet_orientation_l2(env: ManagerBasedRLEnv, asset_cfg: SceneEntityCfg) -> to
     foot_up_w = math_utils.quat_apply(
         foot_quat_w.reshape(-1, 4), foot_up_b.reshape(-1, 3)
     ).reshape(env.num_envs, -1, 3)
-    return torch.sum(torch.square(foot_up_w[..., :2]), dim=1)
+    return torch.sum(torch.square(foot_up_w[..., :2]), dim=(1, 2))
 
 
 class ActionSmoothnessPenalty(ManagerTermBase):
