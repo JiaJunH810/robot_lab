@@ -687,6 +687,12 @@ class RewardsCfg:
         },
     )
 
+    feet_orientation_l2 = RewTerm(
+        func=mdp.feet_orientation_l2,
+        weight=0.0,
+        params={"asset_cfg": SceneEntityCfg("robot", body_names="")},
+    )
+
     feet_height = RewTerm(
         func=mdp.feet_height,
         weight=0.0,
@@ -718,16 +724,12 @@ class RewardsCfg:
             "cycle_time": 0.9,
             "hip_scale": 0.26,
             "knee_scale": 0.52,
-            "ankle_scale": 0.26,
-            "ankle_roll_scale": 0.0,
             "command_threshold": 0.1,
             "asset_cfg": SceneEntityCfg(
                 "robot",
                 joint_names=[
                     "J_hip_.*_pitch",
                     "J_knee_.*_pitch",
-                    "J_ankle_.*_pitch",
-                    "J_ankle_.*_roll",
                 ],
             ),
         },

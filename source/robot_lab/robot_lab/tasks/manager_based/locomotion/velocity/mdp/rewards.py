@@ -677,17 +677,14 @@ def phase_ref_joint_pos(
     cycle_time: float,
     hip_scale: float,
     knee_scale: float,
-    ankle_scale: float,
-    ankle_roll_scale: float = 0.0,
     command_threshold: float = 0.1,
 ) -> torch.Tensor:
     """Reward tracking a sinusoidal gait reference on the sagittal joints.
 
     The joint order in asset_cfg must be
-    [hip_l, hip_r, knee_l, knee_r, ankle_p_l, ankle_p_r, ankle_r_l, ankle_r_r].
+    [hip_l, hip_r, knee_l, knee_r].
     Left/right pitch axes are mirrored: the swing offset is applied to both sides,
     with a +1/-1 sign flip per side so the swing leg always moves toward flexion.
-    Ankle joints keep scale 0 to stay at the default pose throughout the gait.
     """
     asset: Articulation = env.scene[asset_cfg.name]
 
@@ -700,17 +697,10 @@ def phase_ref_joint_pos(
     swing_r = torch.clamp(sin_pos, min=0.0)
 
     # Reference = default pose + swing offsets on the sagittal joints.
-    offsets = torch.stack([swing_l, swing_r] * 4, dim=1)  # (N, 8)
-    signs = torch.tensor(
-        [1.0, -1.0, 1.0, -1.0, 1.0, -1.0, 1.0, -1.0], device=env.device
-    )
+    offsets = torch.stack([swing_l, swing_r] * 2, dim=1)  # (N, 4)
+    signs = torch.tensor([1.0, -1.0, 1.0, -1.0], device=env.device)
     scales = torch.tensor(
-        [
-            hip_scale, hip_scale,
-            knee_scale, knee_scale,
-            ankle_scale, ankle_scale,
-            ankle_roll_scale, ankle_roll_scale,
-        ],
+        [hip_scale, hip_scale, knee_scale, knee_scale],
         device=env.device,
     )
     ref = asset.data.default_joint_pos[:, asset_cfg.joint_ids].clone()
@@ -754,6 +744,18 @@ def feet_slide(
     reward = torch.sum(foot_leteral_vel * contacts, dim=1)
     reward *= torch.clamp(-env.scene["robot"].data.projected_gravity_b[:, 2], 0, 0.7) / 0.7
     return reward
+
+
+def feet_orientation_l2(env: ManagerBasedRLEnv, asset_cfg: SceneEntityCfg) -> torch.Tensor:
+    """Penalize foot roll and pitch relative to the horizontal ground plane."""
+    asset: Articulation = env.scene[asset_cfg.name]
+    foot_quat_w = asset.data.body_link_quat_w[:, asset_cfg.body_ids]
+    foot_up_b = torch.zeros(env.num_envs, foot_quat_w.shape[1], 3, device=env.device)
+    foot_up_b[..., 2] = 1.0
+    foot_up_w = math_utils.quat_apply(
+        foot_quat_w.reshape(-1, 4), foot_up_b.reshape(-1, 3)
+    ).reshape(env.num_envs, -1, 3)
+    return torch.sum(torch.square(foot_up_w[..., :2]), dim=1)
 
 
 class ActionSmoothnessPenalty(ManagerTermBase):
