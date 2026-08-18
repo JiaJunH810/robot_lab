@@ -51,7 +51,7 @@ class CyborgHPRoughEnvCfg(LocomotionVelocityRoughEnvCfg):
             use_default_offset=True, 
             clip={".*": (-100.0, 100.0)}, 
             preserve_order=True,
-            delay_steps=(1, 10),
+            delay_steps=(1, 20),
             joint_obs_delay_steps=(1, 10),
             imu_obs_delay_steps=(1, 10)
         )
@@ -84,8 +84,9 @@ class CyborgHPRoughEnvCfg(LocomotionVelocityRoughEnvCfg):
         # Joint penalties
         self.rewards.joint_torques_l2.weight = -1.5e-6
         self.rewards.joint_torques_l2.params["asset_cfg"].joint_names = ["J_hip_.*", "J_knee_.*", "J_ankle_.*",]
-        self.rewards.joint_vel_l2.weight = 0
-        self.rewards.joint_acc_l2.weight = -5e-9
+        # joint_vel_l2 -1e-05（08-18 柔顺措施）：抑制关节速度，动作更柔和
+        self.rewards.joint_vel_l2.weight = -1e-5
+        self.rewards.joint_acc_l2.weight = -1e-7
         self.rewards.joint_acc_l2.params["asset_cfg"].joint_names = ["J_hip_.*", "J_knee_.*", "J_ankle_.*",]
         # 只保留髋关节偏移惩罚（Cyborg HP 无臂无腰）
         self.rewards.create_joint_deviation_l1_rewterm("joint_deviation_hip_l1", -1.0, ["J_hip_.*_yaw", "J_hip_.*_roll"])
@@ -100,7 +101,7 @@ class CyborgHPRoughEnvCfg(LocomotionVelocityRoughEnvCfg):
 
         # Action penalties
         self.rewards.action_rate_l2.weight = 0
-        self.rewards.action_smoothness.weight = -0.003
+        self.rewards.action_smoothness.weight = -0.005
         self.rewards.action_mirror.weight = 0
         self.rewards.action_mirror.params["mirror_joints"] = [["J_.*_l_.*", "J_.*_r_.*"]]
 
