@@ -120,7 +120,6 @@ class CyborgHPRoughEnvCfg(LocomotionVelocityRoughEnvCfg):
         self.rewards.track_lin_vel_x_exp.weight = 0.0
         self.rewards.track_lin_vel_y_exp.weight = 0.0
         self.rewards.track_ang_vel_z_exp.weight = 0.0
-        self.rewards.track_ang_vel_z_exp.func = mdp.track_ang_vel_z_world_exp
 
         # Others
         self.rewards.feet_air_time.weight = 0.25

@@ -24,7 +24,6 @@ class CyborgHPFlatEnvCfg(CyborgHPRoughEnvCfg):
         self.curriculum.command_levels_ang_vel = None
 
         # Rewards
-        self.rewards.track_ang_vel_z_exp.weight = 2.0
         self.rewards.feet_air_time.weight = 0.0
         self.rewards.feet_air_time.params["threshold"] = 0.4
         self.rewards.feet_air_time_variance.weight = 0.0
