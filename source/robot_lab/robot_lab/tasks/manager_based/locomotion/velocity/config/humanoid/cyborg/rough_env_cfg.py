@@ -104,7 +104,7 @@ class CyborgHPRoughEnvCfg(LocomotionVelocityRoughEnvCfg):
 
         # Action penalties
         self.rewards.action_rate_l2.weight = 0
-        self.rewards.action_smoothness.weight = -0.005
+        self.rewards.action_smoothness.weight = -0.003
         self.rewards.action_mirror.weight = 0
         self.rewards.action_mirror.params["mirror_joints"] = [["J_.*_l_.*", "J_.*_r_.*"]]
 
@@ -153,11 +153,11 @@ class CyborgHPRoughEnvCfg(LocomotionVelocityRoughEnvCfg):
         self.rewards.feet_height_body.params["target_height"] = -0.2
         self.rewards.feet_height_body.params["asset_cfg"].body_names = [self.foot_link_name]
         self.rewards.upward.weight = 0
-        self.rewards.periodic_contact_mismatch.weight = -2.0
+        self.rewards.periodic_contact_mismatch.weight = 0.0
         self.rewards.periodic_contact_mismatch.params["sensor_cfg"].body_names = ["ankle_l_roll_link", "ankle_r_roll_link"]
         self.rewards.periodic_contact_mismatch.params["sensor_cfg"].preserve_order = True
         # phase_feet_height 已关闭（weight 0）：与 phase_ref_joint_pos 同一摆动窗口双重约束，冗余
-        self.rewards.phase_ref_joint_pos.weight = 2.0
+        self.rewards.phase_ref_joint_pos.weight = 0.0
         self.rewards.phase_ref_joint_pos.params["knee_scale"] = 0.30
 
         # If the weight of rewards is 0, set rewards to None
@@ -173,11 +173,11 @@ class CyborgHPRoughEnvCfg(LocomotionVelocityRoughEnvCfg):
 
         # ------------------------------Commands------------------------------
         self.commands.base_velocity.resampling_time_range = (10.0, 10.0)
-        self.commands.base_velocity.rel_standing_envs = 0.1
+        self.commands.base_velocity.rel_standing_envs = 1.0
         self.commands.base_velocity.heading_command = False
-        self.commands.base_velocity.ranges.lin_vel_x = (-0.5, 0.5)
-        self.commands.base_velocity.ranges.lin_vel_y = (-0.15, 0.15)
-        self.commands.base_velocity.ranges.ang_vel_z = (-0.3, 0.3)
+        self.commands.base_velocity.ranges.lin_vel_x = (0.0, 0.0)
+        self.commands.base_velocity.ranges.lin_vel_y = (0.0, 0.0)
+        self.commands.base_velocity.ranges.ang_vel_z = (0.0, 0.0)
 
         # ------------------------------Episode------------------------------
         self.episode_length_s = 30.0
