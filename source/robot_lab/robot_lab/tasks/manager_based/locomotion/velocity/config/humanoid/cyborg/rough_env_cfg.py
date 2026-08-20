@@ -65,7 +65,7 @@ class CyborgHPRoughEnvCfg(LocomotionVelocityRoughEnvCfg):
         self.rewards.base_acc.weight = 0.2
         self.rewards.flat_orientation_l2.func = mdp.orientation_exp
         self.rewards.flat_orientation_l2.weight = 0.5
-        self.rewards.flat_orientation_l2.params["tolerance"] = 0.025
+        self.rewards.flat_orientation_l2.params["tolerance"] = 0.069756
         # base_height_l2 -10.0（防塌锚定，替代 stand_still 软化后的防塌角色）：
         # 塌 5cm 罚 0.025/步、塌 10cm 罚 0.10/步；柔顺变形 1-2cm 几乎不罚
         self.rewards.base_height_l2.weight = -25.0
@@ -77,7 +77,7 @@ class CyborgHPRoughEnvCfg(LocomotionVelocityRoughEnvCfg):
         self.rewards.joint_torques_l2.params["asset_cfg"].joint_names = ["J_hip_.*", "J_knee_.*", "J_ankle_.*",]
         # joint_vel_l2 -1e-05（08-18 柔顺措施）：抑制关节速度，动作更柔和
         self.rewards.joint_vel_l2.weight = -1e-5
-        self.rewards.joint_acc_l2.weight = -5e-8
+        self.rewards.joint_acc_l2.weight = -1e-7
         self.rewards.joint_acc_l2.params["asset_cfg"].joint_names = ["J_hip_.*", "J_knee_.*", "J_ankle_.*",]
         # 只保留髋关节偏移惩罚（Cyborg HP 无臂无腰）
         self.rewards.create_joint_deviation_l1_rewterm("joint_deviation_hip_l1", -1.0, ["J_hip_.*_yaw", "J_hip_.*_roll"])
@@ -87,7 +87,7 @@ class CyborgHPRoughEnvCfg(LocomotionVelocityRoughEnvCfg):
         self.rewards.stand_still.params["asset_cfg"].joint_names = ["J_hip_.*", "J_knee_.*"]
 
         # Action penalties
-        self.rewards.action_smoothness.weight = -0.001
+        self.rewards.action_smoothness.weight = -0.003
 
         # Contact sensor
         self.rewards.contact_forces.weight = -5.0e-4
@@ -95,11 +95,11 @@ class CyborgHPRoughEnvCfg(LocomotionVelocityRoughEnvCfg):
         self.rewards.contact_forces.params["sensor_cfg"].body_names = [self.foot_link_name]
 
         # Velocity-tracking rewards
-        self.rewards.track_lin_vel_x_exp.weight = 1.0
-        self.rewards.track_lin_vel_y_exp.weight = 0.5
-        self.rewards.track_ang_vel_z_exp.weight = 1.0
-        self.rewards.phase_ref_joint_pos.weight = 1.0
-        self.rewards.periodic_contact_mismatch.weight = -2.0
+        self.rewards.track_lin_vel_x_exp.weight = 0
+        self.rewards.track_lin_vel_y_exp.weight = 0.
+        self.rewards.track_ang_vel_z_exp.weight = 0
+        self.rewards.phase_ref_joint_pos.weight = 0.
+        self.rewards.periodic_contact_mismatch.weight = 0.0
         self.rewards.periodic_contact_mismatch.params["sensor_cfg"].body_names = ["ankle_l_roll_link", "ankle_r_roll_link"]
         self.rewards.periodic_contact_mismatch.params["sensor_cfg"].preserve_order = True
 
@@ -137,9 +137,9 @@ class CyborgHPRoughEnvCfg(LocomotionVelocityRoughEnvCfg):
         self.commands.base_velocity.resampling_time_range = (10.0, 10.0)
         self.commands.base_velocity.rel_standing_envs = 0.5
         self.commands.base_velocity.heading_command = False
-        self.commands.base_velocity.ranges.lin_vel_x = (-0.5, 0.5)
-        self.commands.base_velocity.ranges.lin_vel_y = (-0.15, 0.15)
-        self.commands.base_velocity.ranges.ang_vel_z = (-0.3, 0.3)
+        self.commands.base_velocity.ranges.lin_vel_x = (-0., 0.)
+        self.commands.base_velocity.ranges.lin_vel_y = (-0., 0.)
+        self.commands.base_velocity.ranges.ang_vel_z = (-0., 0.)
 
         # ------------------------------Episode------------------------------
         self.episode_length_s = 30.0
