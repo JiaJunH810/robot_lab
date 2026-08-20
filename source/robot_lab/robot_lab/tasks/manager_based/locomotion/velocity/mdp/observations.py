@@ -75,3 +75,26 @@ def phase(
     )
 
     return phase_tensor * moving.unsqueeze(-1).to(phase_tensor.dtype)
+
+def external_force_xy(
+    env: ManagerBasedEnv,
+    asset_cfg: SceneEntityCfg = SceneEntityCfg("robot", body_ids=[0]),
+) -> torch.Tensor:
+    robot: Articulation = env.scene[asset_cfg.name]
+
+    # shape: [num_envs, num_bodies, 3]
+    force = robot.permanent_wrench_composer.composed_force_as_torch
+
+    # 取根部 body 的 x、y 外力
+    return force[:, 0, :2]
+
+def external_torque(
+    env: ManagerBasedEnv,
+    asset_cfg: SceneEntityCfg = SceneEntityCfg("robot", body_ids=[0]),
+) -> torch.Tensor:
+    robot: Articulation = env.scene[asset_cfg.name]
+
+    torque = robot.permanent_wrench_composer.composed_torque_as_torch
+
+    # 根部 roll、pitch、yaw 外力矩
+    return torque[:, 0, :]

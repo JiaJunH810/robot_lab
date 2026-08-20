@@ -9,7 +9,7 @@ from robot_lab.tasks.manager_based.locomotion.velocity.velocity_env_cfg import L
 ##
 # Pre-defined configs
 ##
-from robot_lab.assets.cyborg_hp import CYBORG_HALF_PED_CFG  # isort: skip
+from robot_lab.assets.cyborg_hp import CYBORG_HALF_PED_ACTION_SCALE, CYBORG_HALF_PED_CFG  # isort: skip
 
 
 @configclass
@@ -40,14 +40,7 @@ class CyborgHPRoughEnvCfg(LocomotionVelocityRoughEnvCfg):
         self.actions.joint_pos = mdp.DelayedJointPositionActionCfg(
             asset_name="robot", 
             joint_names=[".*"], 
-            scale={
-                "J_hip_.*_roll": 0.4,
-                "J_hip_.*_yaw": 0.35,
-                "J_hip_.*_pitch": 0.35,
-                "J_knee_.*_pitch": 0.35,
-                "J_ankle_.*_pitch": 0.35,
-                "J_ankle_.*_roll": 0.35,
-            },
+            scale=CYBORG_HALF_PED_ACTION_SCALE,
             use_default_offset=True, 
             clip={".*": (-100.0, 100.0)}, 
             preserve_order=True,
@@ -68,8 +61,6 @@ class CyborgHPRoughEnvCfg(LocomotionVelocityRoughEnvCfg):
         self.rewards.is_terminated.weight = -200.0
 
         # Root penalties
-        self.rewards.lin_vel_z_l2.weight = 0
-        self.rewards.ang_vel_xy_l2.weight = 0
         self.rewards.vel_mismatch_exp.weight = 0.3
         self.rewards.base_acc.weight = 0.2
         self.rewards.flat_orientation_l2.func = mdp.orientation_exp
@@ -80,8 +71,6 @@ class CyborgHPRoughEnvCfg(LocomotionVelocityRoughEnvCfg):
         self.rewards.base_height_l2.weight = -25.0
         self.rewards.base_height_l2.params["target_height"] = 0.89
         self.rewards.base_height_l2.params["asset_cfg"].body_names = [self.base_link_name]
-        self.rewards.body_lin_acc_l2.weight = 0
-        self.rewards.body_lin_acc_l2.params["asset_cfg"].body_names = [self.base_link_name]
 
         # Joint penalties
         self.rewards.joint_torques_l2.weight = -1.5e-6
@@ -93,45 +82,25 @@ class CyborgHPRoughEnvCfg(LocomotionVelocityRoughEnvCfg):
         # 只保留髋关节偏移惩罚（Cyborg HP 无臂无腰）
         self.rewards.create_joint_deviation_l1_rewterm("joint_deviation_hip_l1", -1.0, ["J_hip_.*_yaw", "J_hip_.*_roll"])
         self.rewards.joint_pos_limits.weight = -0.5
-        self.rewards.joint_vel_limits.weight = 0
-        self.rewards.joint_power.weight = 0
         # stand_still -1.0 → -0.3（软化）：被压时关节允许变形（柔顺），防塌由 base_height_l2 接管
         self.rewards.stand_still.weight = -0.1
         self.rewards.stand_still.params["asset_cfg"].joint_names = ["J_hip_.*", "J_knee_.*"]
-        # joint_pos_penalty 已关闭（weight 0）：运动时与 phase_ref_joint_pos 对抗，静止时与 stand_still 重复
-        self.rewards.joint_mirror.weight = 0
-        self.rewards.joint_mirror.params["mirror_joints"] = [["J_.*_l_.*", "J_.*_r_.*"]]
 
         # Action penalties
-        self.rewards.action_rate_l2.weight = 0
         self.rewards.action_smoothness.weight = -0.003
-        self.rewards.action_mirror.weight = 0
-        self.rewards.action_mirror.params["mirror_joints"] = [["J_.*_l_.*", "J_.*_r_.*"]]
 
         # Contact sensor
-        self.rewards.undesired_contacts.weight = 0
-        self.rewards.undesired_contacts.params["sensor_cfg"].body_names = [f"^(?!.*{self.foot_link_name}).*"]
         self.rewards.contact_forces.weight = -5.0e-4
         self.rewards.contact_forces.params["threshold"] = 2000
         self.rewards.contact_forces.params["sensor_cfg"].body_names = [self.foot_link_name]
 
         # Velocity-tracking rewards
-        self.rewards.track_lin_vel_xy_exp.weight = 0
-        self.rewards.track_lin_vel_x_exp.weight = 0.0
-        self.rewards.track_lin_vel_y_exp.weight = 0.0
-        self.rewards.track_ang_vel_z_exp.weight = 0.0
 
         # Others
         self.rewards.feet_air_time.weight = 0.25
         self.rewards.feet_air_time.func = mdp.feet_air_time_positive_biped
         self.rewards.feet_air_time.params["threshold"] = 0.4
         self.rewards.feet_air_time.params["sensor_cfg"].body_names = [self.foot_link_name]
-        self.rewards.feet_contact.weight = 0
-        self.rewards.feet_contact.params["sensor_cfg"].body_names = [self.foot_link_name]
-        self.rewards.feet_contact_without_cmd.weight = 0
-        self.rewards.feet_contact_without_cmd.params["sensor_cfg"].body_names = [self.foot_link_name]
-        self.rewards.feet_stumble.weight = 0
-        self.rewards.feet_stumble.params["sensor_cfg"].body_names = [self.foot_link_name]
         self.rewards.feet_air_time_variance.weight = -10.0
         self.rewards.feet_air_time_variance.params["sensor_cfg"].body_names = [self.foot_link_name]
         self.rewards.feet_slide.weight = -0.2
@@ -145,19 +114,6 @@ class CyborgHPRoughEnvCfg(LocomotionVelocityRoughEnvCfg):
         self.rewards.feet_distance_y_exp.params["stance_width"] = 0.31
         self.rewards.feet_distance_y_exp.params["asset_cfg"].body_names = [self.foot_link_name]
         self.rewards.feet_distance_y_exp.params["asset_cfg"].preserve_order = True
-        self.rewards.feet_height.weight = 0.0
-        self.rewards.feet_height.params["target_height"] = 0.12
-        self.rewards.feet_height.params["asset_cfg"].body_names = [self.foot_link_name]
-        self.rewards.feet_height_body.weight = 0
-        self.rewards.feet_height_body.params["target_height"] = -0.2
-        self.rewards.feet_height_body.params["asset_cfg"].body_names = [self.foot_link_name]
-        self.rewards.upward.weight = 0
-        self.rewards.periodic_contact_mismatch.weight = 0.0
-        self.rewards.periodic_contact_mismatch.params["sensor_cfg"].body_names = ["ankle_l_roll_link", "ankle_r_roll_link"]
-        self.rewards.periodic_contact_mismatch.params["sensor_cfg"].preserve_order = True
-        # phase_feet_height 已关闭（weight 0）：与 phase_ref_joint_pos 同一摆动窗口双重约束，冗余
-        self.rewards.phase_ref_joint_pos.weight = 0.0
-        self.rewards.phase_ref_joint_pos.params["knee_scale"] = 0.30
 
         # If the weight of rewards is 0, set rewards to None
         if self.__class__.__name__ == "CyborgHPRoughEnvCfg":

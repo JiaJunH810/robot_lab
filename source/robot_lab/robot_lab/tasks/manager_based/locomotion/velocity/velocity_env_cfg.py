@@ -257,11 +257,23 @@ class ObservationsCfg:
             clip=(-1.0, 1.0),
             scale=1.0,
         )
-        # joint_effort = ObsTerm(
-        #     func=mdp.joint_effort,
-        #     clip=(-100, 100),
-        #     scale=0.01,
-        # )
+        external_force_xy = ObsTerm(
+            func=mdp.external_force_xy,
+            params={
+                "asset_cfg": SceneEntityCfg("robot", body_ids=[0]),
+            },
+            clip=(-100.0, 100.0),
+            scale=0.1,
+        )
+
+        external_torque = ObsTerm(
+            func=mdp.external_torque,
+            params={
+                "asset_cfg": SceneEntityCfg("robot", body_ids=[0]),
+            },
+            clip=(-100.0, 100.0),
+            scale=0.05,
+        )
 
         def __post_init__(self):
             self.enable_corruption = False
