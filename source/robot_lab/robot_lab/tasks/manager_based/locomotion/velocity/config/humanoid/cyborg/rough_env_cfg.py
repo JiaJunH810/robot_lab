@@ -83,7 +83,7 @@ class CyborgHPRoughEnvCfg(LocomotionVelocityRoughEnvCfg):
         self.rewards.create_joint_deviation_l1_rewterm("joint_deviation_hip_l1", -1.0, ["J_hip_.*_yaw", "J_hip_.*_roll"])
         self.rewards.joint_pos_limits.weight = -0.5
         # stand_still -1.0 → -0.3（软化）：被压时关节允许变形（柔顺），防塌由 base_height_l2 接管
-        self.rewards.stand_still.weight = -0.3
+        self.rewards.stand_still.weight = -0.7
         self.rewards.stand_still.params["asset_cfg"].joint_names = ["J_hip_.*", "J_knee_.*"]
 
         # Action penalties
@@ -98,7 +98,7 @@ class CyborgHPRoughEnvCfg(LocomotionVelocityRoughEnvCfg):
         self.rewards.track_lin_vel_x_exp.weight = 1.0
         self.rewards.track_lin_vel_y_exp.weight = 0.5
         self.rewards.track_ang_vel_z_exp.weight = 1.0
-        self.rewards.phase_ref_joint_pos.weight = 2.0
+        self.rewards.phase_ref_joint_pos.weight = 1.0
         self.rewards.periodic_contact_mismatch.weight = -2.0
         self.rewards.periodic_contact_mismatch.params["sensor_cfg"].body_names = ["ankle_l_roll_link", "ankle_r_roll_link"]
         self.rewards.periodic_contact_mismatch.params["sensor_cfg"].preserve_order = True
@@ -135,7 +135,7 @@ class CyborgHPRoughEnvCfg(LocomotionVelocityRoughEnvCfg):
 
         # ------------------------------Commands------------------------------
         self.commands.base_velocity.resampling_time_range = (10.0, 10.0)
-        self.commands.base_velocity.rel_standing_envs = 0.2
+        self.commands.base_velocity.rel_standing_envs = 0.5
         self.commands.base_velocity.heading_command = False
         self.commands.base_velocity.ranges.lin_vel_x = (-0.5, 0.5)
         self.commands.base_velocity.ranges.lin_vel_y = (-0.15, 0.15)
