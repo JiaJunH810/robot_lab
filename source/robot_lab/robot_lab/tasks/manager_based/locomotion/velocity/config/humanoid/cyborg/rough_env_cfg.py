@@ -65,7 +65,7 @@ class CyborgHPRoughEnvCfg(LocomotionVelocityRoughEnvCfg):
         self.rewards.base_acc.weight = 0.2
         self.rewards.flat_orientation_l2.func = mdp.orientation_exp
         self.rewards.flat_orientation_l2.weight = 0.3
-        self.rewards.flat_orientation_l2.params["tolerance"] = 0.069756
+        self.rewards.flat_orientation_l2.params["tolerance"] = 0.025
         # base_height_l2 -10.0（防塌锚定，替代 stand_still 软化后的防塌角色）：
         # 塌 5cm 罚 0.025/步、塌 10cm 罚 0.10/步；柔顺变形 1-2cm 几乎不罚
         self.rewards.base_height_l2.weight = -25.0
@@ -95,6 +95,11 @@ class CyborgHPRoughEnvCfg(LocomotionVelocityRoughEnvCfg):
         self.rewards.contact_forces.params["sensor_cfg"].body_names = [self.foot_link_name]
 
         # Velocity-tracking rewards
+        self.rewards.track_lin_vel_x_exp.weight = 1.0
+        self.rewards.track_lin_vel_y_exp.weight = 0.5
+        self.rewards.track_ang_vel_z_exp.weight = 1.0
+        self.rewards.phase_ref_joint_pos.weight = 2.0
+        self.rewards.periodic_contact_mismatch.weight = -2.0
 
         # Others
         self.rewards.feet_air_time.weight = 0.25
@@ -128,11 +133,11 @@ class CyborgHPRoughEnvCfg(LocomotionVelocityRoughEnvCfg):
 
         # ------------------------------Commands------------------------------
         self.commands.base_velocity.resampling_time_range = (10.0, 10.0)
-        self.commands.base_velocity.rel_standing_envs = 1.0
+        self.commands.base_velocity.rel_standing_envs = 0.2
         self.commands.base_velocity.heading_command = False
-        self.commands.base_velocity.ranges.lin_vel_x = (0.0, 0.0)
-        self.commands.base_velocity.ranges.lin_vel_y = (0.0, 0.0)
-        self.commands.base_velocity.ranges.ang_vel_z = (0.0, 0.0)
+        self.commands.base_velocity.ranges.lin_vel_x = (-0.5, 0.5)
+        self.commands.base_velocity.ranges.lin_vel_y = (-0.15, 0.15)
+        self.commands.base_velocity.ranges.ang_vel_z = (-0.3, 0.3)
 
         # ------------------------------Episode------------------------------
         self.episode_length_s = 30.0
