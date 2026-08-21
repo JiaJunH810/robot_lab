@@ -61,7 +61,7 @@ class CyborgHPRoughEnvCfg(LocomotionVelocityRoughEnvCfg):
         self.rewards.is_terminated.weight = -200.0
 
         # Root penalties
-        self.rewards.vel_mismatch_exp.weight = 0.1
+        self.rewards.vel_mismatch_exp.weight = 0.2
         self.rewards.base_acc.weight = 0.2
         self.rewards.flat_orientation_l2.func = mdp.orientation_exp
         self.rewards.flat_orientation_l2.weight = 0.3
@@ -97,7 +97,7 @@ class CyborgHPRoughEnvCfg(LocomotionVelocityRoughEnvCfg):
         # Velocity-tracking rewards
         self.rewards.track_lin_vel_x_exp.weight = 0
         self.rewards.track_lin_vel_y_exp.weight = 0.
-        self.rewards.track_ang_vel_z_exp.weight = 0.1
+        self.rewards.track_ang_vel_z_exp.weight = 0.
         self.rewards.track_ang_vel_z_exp.params["std"] = 0.1
         self.rewards.track_ang_vel_z_exp.func = mdp.track_ang_vel_z_world_exp
         self.rewards.phase_ref_joint_pos.weight = 0.
