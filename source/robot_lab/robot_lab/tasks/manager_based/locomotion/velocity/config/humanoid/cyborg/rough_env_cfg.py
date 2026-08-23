@@ -87,7 +87,7 @@ class CyborgHPRoughEnvCfg(LocomotionVelocityRoughEnvCfg):
         self.rewards.stand_still.params["asset_cfg"].joint_names = ["J_hip_.*", "J_knee_.*"]
 
         # Action penalties
-        self.rewards.action_smoothness.weight = -0.0025
+        self.rewards.action_smoothness.weight = -0.00275
 
         # Contact sensor
         self.rewards.contact_forces.weight = -5.0e-4
