@@ -87,7 +87,7 @@ class CyborgHPRoughEnvCfg(LocomotionVelocityRoughEnvCfg):
         self.rewards.stand_still.params["asset_cfg"].joint_names = ["J_hip_.*", "J_knee_.*"]
 
         # Action penalties
-        self.rewards.action_smoothness.weight = -0.00325
+        self.rewards.action_smoothness.weight = -0.003
 
         # Contact sensor
         self.rewards.contact_forces.weight = -5.0e-4
@@ -95,13 +95,13 @@ class CyborgHPRoughEnvCfg(LocomotionVelocityRoughEnvCfg):
         self.rewards.contact_forces.params["sensor_cfg"].body_names = [self.foot_link_name]
 
         # Velocity-tracking rewards
-        self.rewards.track_lin_vel_x_exp.weight = 0
-        self.rewards.track_lin_vel_y_exp.weight = 0.
-        self.rewards.track_ang_vel_z_exp.weight = 0.
+        self.rewards.track_lin_vel_x_exp.weight = 0.3
+        self.rewards.track_lin_vel_y_exp.weight = 0.3
+        self.rewards.track_ang_vel_z_exp.weight = 0.3
         self.rewards.track_ang_vel_z_exp.params["std"] = 0.1
         self.rewards.track_ang_vel_z_exp.func = mdp.track_ang_vel_z_world_exp
-        self.rewards.phase_ref_joint_pos.weight = 0.
-        self.rewards.periodic_contact_mismatch.weight = 0.0
+        self.rewards.phase_ref_joint_pos.weight = 0.3
+        self.rewards.periodic_contact_mismatch.weight = -0.3
         self.rewards.periodic_contact_mismatch.params["sensor_cfg"].body_names = ["ankle_l_roll_link", "ankle_r_roll_link"]
         self.rewards.periodic_contact_mismatch.params["sensor_cfg"].preserve_order = True
 
@@ -110,7 +110,7 @@ class CyborgHPRoughEnvCfg(LocomotionVelocityRoughEnvCfg):
         self.rewards.feet_air_time.func = mdp.feet_air_time_positive_biped
         self.rewards.feet_air_time.params["threshold"] = 0.4
         self.rewards.feet_air_time.params["sensor_cfg"].body_names = [self.foot_link_name]
-        self.rewards.feet_air_time_variance.weight = -10.0
+        self.rewards.feet_air_time_variance.weight = 0.0
         self.rewards.feet_air_time_variance.params["sensor_cfg"].body_names = [self.foot_link_name]
         self.rewards.feet_slide.weight = -0.2
         self.rewards.feet_slide.params["sensor_cfg"].body_names = [self.foot_link_name]
@@ -139,9 +139,9 @@ class CyborgHPRoughEnvCfg(LocomotionVelocityRoughEnvCfg):
         self.commands.base_velocity.resampling_time_range = (10.0, 10.0)
         self.commands.base_velocity.rel_standing_envs = 0.5
         self.commands.base_velocity.heading_command = False
-        self.commands.base_velocity.ranges.lin_vel_x = (-0., 0.)
-        self.commands.base_velocity.ranges.lin_vel_y = (-0., 0.)
-        self.commands.base_velocity.ranges.ang_vel_z = (-0., 0.)
+        self.commands.base_velocity.ranges.lin_vel_x = (-0.5, 0.5)
+        self.commands.base_velocity.ranges.lin_vel_y = (-0.3, 0.3)
+        self.commands.base_velocity.ranges.ang_vel_z = (-0.5, 0.5)
 
         # ------------------------------Episode------------------------------
         self.episode_length_s = 30.0
