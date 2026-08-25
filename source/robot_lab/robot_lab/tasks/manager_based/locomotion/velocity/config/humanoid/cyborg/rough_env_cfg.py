@@ -97,7 +97,7 @@ class CyborgHPRoughEnvCfg(LocomotionVelocityRoughEnvCfg):
         # Velocity-tracking rewards
         self.rewards.track_lin_vel_x_exp.weight = 0.3
         self.rewards.track_lin_vel_y_exp.weight = 0.3
-        self.rewards.track_ang_vel_z_exp.weight = 0.3
+        self.rewards.track_ang_vel_z_exp.weight = 0.2
         self.rewards.track_ang_vel_z_exp.params["std"] = 0.1
         self.rewards.track_ang_vel_z_exp.func = mdp.track_ang_vel_z_world_exp
         self.rewards.phase_ref_joint_pos.weight = 0.2
