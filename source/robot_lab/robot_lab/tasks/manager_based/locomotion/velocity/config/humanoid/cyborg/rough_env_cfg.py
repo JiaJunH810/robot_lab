@@ -83,8 +83,8 @@ class CyborgHPRoughEnvCfg(LocomotionVelocityRoughEnvCfg):
         self.rewards.create_joint_deviation_l1_rewterm("joint_deviation_hip_l1", -1.0, ["J_hip_.*_yaw", "J_hip_.*_roll"])
         self.rewards.joint_pos_limits.weight = -0.5
         # stand_still -1.0 → -0.3（软化）：被压时关节允许变形（柔顺），防塌由 base_height_l2 接管
-        self.rewards.stand_still.weight = -0.1
-        self.rewards.stand_still.params["asset_cfg"].joint_names = ["J_hip_.*", "J_knee_.*"]
+        self.rewards.stand_still.weight = -0.3
+        self.rewards.stand_still.params["asset_cfg"].joint_names = ["J_hip_.*", "J_knee_.*", "J_ankle_.*"]
 
         # Action penalties
         self.rewards.action_smoothness.weight = -0.003
