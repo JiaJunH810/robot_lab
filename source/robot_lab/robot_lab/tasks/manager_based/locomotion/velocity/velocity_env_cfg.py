@@ -339,7 +339,7 @@ class EventCfg:
         mode="startup",
         params={
             "asset_cfg": SceneEntityCfg("robot", body_names=".*"),
-            "com_range": {"x": (-0.04, 0.04), "y": (-0.06, 0.06), "z": (-0.06, 0.06)},
+            "com_range": {"x": (-0.06, 0.06), "y": (-0.06, 0.06), "z": (-0.06, 0.06)},
         },
     )
 
@@ -413,13 +413,13 @@ class EventCfg:
     randomize_push_robot = EventTerm(
         func=mdp.push_by_setting_velocity,
         mode="interval",
-        interval_range_s=(10.0, 15.0),
+        interval_range_s=(8.0, 15.0),
         params={
             "velocity_range": {
                 "x": (-0.5, 0.5), 
                 "y": (-0.5, 0.5), 
-                "roll": (-0.6, 0.6),
-                "pitch": (-0.6, 0.6),
+                "roll": (-0.4, 0.4),
+                "pitch": (-0.4, 0.4),
                 "yaw": (-0.6, 0.6),
             }
         },
