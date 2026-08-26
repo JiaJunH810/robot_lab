@@ -359,7 +359,7 @@ class EventCfg:
         # func=mdp.reset_joints_by_offset,
         mode="reset",
         params={
-            "position_range": (-0.05, 0.05),
+            "position_range": (-0.8, 0.8),
             "velocity_range": (0.0, 0.0),
         },
     )
