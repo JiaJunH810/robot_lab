@@ -693,10 +693,8 @@ def phase_ref_joint_pos(
 
     # Left leg swings during [0.55, 0.95) (sin < 0), right leg during [0.05, 0.45) (sin > 0).
     sin_pos = torch.sin(2.0 * torch.pi * phase)
-    # Square after half-wave clipping: preserve alternating legs while making
-    # the lift-off and touchdown slopes zero.
-    swing_l = torch.clamp(-sin_pos, min=0.0).square()
-    swing_r = torch.clamp(sin_pos, min=0.0).square()
+    swing_l = torch.clamp(-sin_pos, min=0.0)
+    swing_r = torch.clamp(sin_pos, min=0.0)
 
     # Reference = default pose + swing offsets on the sagittal joints.
     offsets = torch.stack([swing_l, swing_r] * 2, dim=1)  # (N, 4)
