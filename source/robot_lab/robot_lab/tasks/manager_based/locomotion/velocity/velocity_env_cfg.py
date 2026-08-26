@@ -339,7 +339,7 @@ class EventCfg:
         mode="startup",
         params={
             "asset_cfg": SceneEntityCfg("robot", body_names=".*"),
-            "com_range": {"x": (-0.06, 0.06), "y": (-0.06, 0.06), "z": (-0.06, 0.06)},
+            "com_range": {"x": (-0.04, 0.04), "y": (-0.06, 0.06), "z": (-0.06, 0.06)},
         },
     )
 
@@ -369,8 +369,8 @@ class EventCfg:
         mode="reset",
         params={
             "asset_cfg": SceneEntityCfg("robot", joint_names=".*"),
-            "stiffness_distribution_params": (0.8, 1.4),
-            "damping_distribution_params": (0.6, 1.2),
+            "stiffness_distribution_params": (0.7, 1.3),
+            "damping_distribution_params": (0.7, 1.3),
             "operation": "scale",
             "distribution": "uniform",
         },
