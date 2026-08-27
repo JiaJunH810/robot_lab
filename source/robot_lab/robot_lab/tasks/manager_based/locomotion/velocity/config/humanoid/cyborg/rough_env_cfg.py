@@ -76,7 +76,7 @@ class CyborgHPRoughEnvCfg(LocomotionVelocityRoughEnvCfg):
         self.rewards.joint_torques_l2.weight = -1.5e-6
         self.rewards.joint_torques_l2.params["asset_cfg"].joint_names = ["J_hip_.*", "J_knee_.*", "J_ankle_.*",]
         # joint_vel_l2 -1e-05（08-18 柔顺措施）：抑制关节速度，动作更柔和
-        self.rewards.joint_vel_l2.weight = -1e-5
+        self.rewards.joint_vel_l2.weight = -1e-4
         self.rewards.joint_acc_l2.weight = -1e-7
         self.rewards.joint_acc_l2.params["asset_cfg"].joint_names = ["J_hip_.*", "J_knee_.*", "J_ankle_.*",]
         # 只保留髋关节偏移惩罚（Cyborg HP 无臂无腰）
@@ -101,7 +101,6 @@ class CyborgHPRoughEnvCfg(LocomotionVelocityRoughEnvCfg):
         self.rewards.track_ang_vel_z_exp.params["std"] = 0.1
         self.rewards.track_ang_vel_z_exp.func = mdp.track_ang_vel_z_world_exp
         self.rewards.phase_ref_joint_pos.weight = 1.0
-        self.rewards.phase_ref_joint_pos.params["knee_scale"] = 0.50
         self.rewards.periodic_contact_mismatch.weight = -0.3
         self.rewards.periodic_contact_mismatch.params["sensor_cfg"].body_names = ["ankle_l_roll_link", "ankle_r_roll_link"]
         self.rewards.periodic_contact_mismatch.params["sensor_cfg"].preserve_order = True
