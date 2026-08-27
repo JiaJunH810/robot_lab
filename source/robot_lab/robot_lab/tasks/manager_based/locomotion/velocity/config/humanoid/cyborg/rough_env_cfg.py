@@ -65,7 +65,7 @@ class CyborgHPRoughEnvCfg(LocomotionVelocityRoughEnvCfg):
         self.rewards.base_acc.weight = 0.2
         self.rewards.flat_orientation_l2.func = mdp.orientation_exp
         self.rewards.flat_orientation_l2.weight = 0.3
-        self.rewards.flat_orientation_l2.params["tolerance"] = 0.052336
+        self.rewards.flat_orientation_l2.params["tolerance"] = 0.069756
         # base_height_l2 -10.0（防塌锚定，替代 stand_still 软化后的防塌角色）：
         # 塌 5cm 罚 0.025/步、塌 10cm 罚 0.10/步；柔顺变形 1-2cm 几乎不罚
         self.rewards.base_height_l2.weight = -25.0
@@ -77,7 +77,7 @@ class CyborgHPRoughEnvCfg(LocomotionVelocityRoughEnvCfg):
         self.rewards.joint_torques_l2.params["asset_cfg"].joint_names = ["J_hip_.*", "J_knee_.*", "J_ankle_.*",]
         # joint_vel_l2 -1e-05（08-18 柔顺措施）：抑制关节速度，动作更柔和
         self.rewards.joint_vel_l2.weight = -1e-5
-        self.rewards.joint_acc_l2.weight = -1e-7
+        self.rewards.joint_acc_l2.weight = -2e-7
         self.rewards.joint_acc_l2.params["asset_cfg"].joint_names = ["J_hip_.*", "J_knee_.*", "J_ankle_.*",]
         # 只保留髋关节偏移惩罚（Cyborg HP 无臂无腰）
         self.rewards.create_joint_deviation_l1_rewterm("joint_deviation_hip_l1", -1.25, ["J_hip_.*_yaw", "J_hip_.*_roll"])
