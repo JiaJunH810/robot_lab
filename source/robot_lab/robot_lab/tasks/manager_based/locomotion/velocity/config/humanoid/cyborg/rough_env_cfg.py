@@ -101,7 +101,7 @@ class CyborgHPRoughEnvCfg(LocomotionVelocityRoughEnvCfg):
         self.rewards.track_ang_vel_z_exp.params["std"] = 0.1
         self.rewards.track_ang_vel_z_exp.func = mdp.track_ang_vel_z_world_exp
         self.rewards.phase_ref_joint_pos.weight = 1.0
-        self.rewards.phase_ref_joint_pos.params["knee_scale"] = 0.48
+        self.rewards.phase_ref_joint_pos.params["knee_scale"] = 0.50
         self.rewards.periodic_contact_mismatch.weight = -0.3
         self.rewards.periodic_contact_mismatch.params["sensor_cfg"].body_names = ["ankle_l_roll_link", "ankle_r_roll_link"]
         self.rewards.periodic_contact_mismatch.params["sensor_cfg"].preserve_order = True
@@ -119,7 +119,7 @@ class CyborgHPRoughEnvCfg(LocomotionVelocityRoughEnvCfg):
         self.rewards.feet_orientation_l2.weight = -2.0
         self.rewards.feet_orientation_l2.params["asset_cfg"].body_names = [self.foot_link_name]
         # 步宽约束（防交叉脚）：期望两脚 y 距离 0.31 m（default 位姿步宽），body 顺序须为 [左, 右]
-        self.rewards.feet_distance_y_exp.weight = 0.5
+        self.rewards.feet_distance_y_exp.weight = 0.4
         self.rewards.feet_distance_y_exp.params["std"] = 0.15
         self.rewards.feet_distance_y_exp.params["stance_width"] = 0.31
         self.rewards.feet_distance_y_exp.params["asset_cfg"].body_names = [self.foot_link_name]
