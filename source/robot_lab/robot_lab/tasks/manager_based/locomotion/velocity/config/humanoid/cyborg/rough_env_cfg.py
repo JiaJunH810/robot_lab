@@ -138,7 +138,7 @@ class CyborgHPRoughEnvCfg(LocomotionVelocityRoughEnvCfg):
 
         # ------------------------------Commands------------------------------
         self.commands.base_velocity.resampling_time_range = (10.0, 10.0)
-        self.commands.base_velocity.rel_standing_envs = 0.5
+        self.commands.base_velocity.rel_standing_envs = 0.7
         self.commands.base_velocity.heading_command = False
         self.commands.base_velocity.ranges.lin_vel_x = (-0.5, 0.5)
         self.commands.base_velocity.ranges.lin_vel_y = (-0.3, 0.3)
