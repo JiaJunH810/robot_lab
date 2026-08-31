@@ -54,5 +54,5 @@ class CyborgHPFlatPPORunnerCfg(CyborgHPRoughPPORunnerCfg):
     def __post_init__(self):
         super().__post_init__()
 
-        self.max_iterations = 5010
+        self.max_iterations = 6010
         self.experiment_name = "cyborg_hp_flat"
