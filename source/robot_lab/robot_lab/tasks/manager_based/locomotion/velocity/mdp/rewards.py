@@ -430,8 +430,9 @@ def feet_air_time(
     first_contact = contact_sensor.compute_first_contact(env.step_dt)[:, sensor_cfg.body_ids]
     last_air_time = contact_sensor.data.last_air_time[:, sensor_cfg.body_ids]
     reward = torch.sum((last_air_time - threshold) * first_contact, dim=1)
-    # no reward for zero command
-    reward *= torch.norm(env.command_manager.get_command(command_name), dim=1) > 0.1
+    # Use the same activation rule as phase-based rewards:
+    # planar command norm > 0.1 OR absolute yaw command > 0.1.
+    reward *= _phase_active(env, command_name, 0.1).float()
     reward *= torch.clamp(-env.scene["robot"].data.projected_gravity_b[:, 2], 0, 0.7) / 0.7
     return reward
 
@@ -453,8 +454,9 @@ def feet_air_time_positive_biped(env, command_name: str, threshold: float, senso
     single_stance = torch.sum(in_contact.int(), dim=1) == 1
     reward = torch.min(torch.where(single_stance.unsqueeze(-1), in_mode_time, 0.0), dim=1)[0]
     reward = torch.clamp(reward, max=threshold)
-    # no reward for zero command
-    reward *= torch.norm(env.command_manager.get_command(command_name), dim=1) > 0.1
+    # Use the same activation rule as phase-based rewards:
+    # planar command norm > 0.1 OR absolute yaw command > 0.1.
+    reward *= _phase_active(env, command_name, 0.1).float()
     reward *= torch.clamp(-env.scene["robot"].data.projected_gravity_b[:, 2], 0, 0.7) / 0.7
     return reward
 
@@ -692,9 +694,11 @@ def phase_ref_joint_pos(
     phase = torch.remainder(phase, 1.0)
 
     # Left leg swings during [0.55, 0.95) (sin < 0), right leg during [0.05, 0.45) (sin > 0).
+    # Use half-wave sin^2 references: each swing stays non-negative while
+    # retaining the alternating left/right timing of the original sine wave.
     sin_pos = torch.sin(2.0 * torch.pi * phase)
-    swing_l = torch.clamp(-sin_pos, min=0.0)
-    swing_r = torch.clamp(sin_pos, min=0.0)
+    swing_l = torch.square(torch.clamp(-sin_pos, min=0.0))
+    swing_r = torch.square(torch.clamp(sin_pos, min=0.0))
 
     # Reference = default pose + swing offsets on the sagittal joints.
     offsets = torch.stack([swing_l, swing_r] * 2, dim=1)  # (N, 4)
