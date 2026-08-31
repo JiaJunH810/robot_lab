@@ -15,6 +15,7 @@ from robot_lab.assets.cyborg_hp import CYBORG_HALF_PED_ACTION_SCALE, CYBORG_HALF
 @configclass
 class CyborgHPRoughEnvCfg(LocomotionVelocityRoughEnvCfg):
     base_link_name = "base_link"
+    torso_link_name = "waist_pitch_link"
     foot_link_name = "ankle_.*_roll_link"
 
     def __post_init__(self):
@@ -54,6 +55,7 @@ class CyborgHPRoughEnvCfg(LocomotionVelocityRoughEnvCfg):
         self.events.randomize_rigid_body_mass_others.params["asset_cfg"].body_names = [
             f"^(?!.*{self.base_link_name}).*"
         ]
+        self.events.randomize_com_positions.params["asset_cfg"].body_names = [self.torso_link_name]
         self.events.randomize_apply_external_force_torque.params["asset_cfg"].body_names = [self.base_link_name]
 
         # ------------------------------Rewards------------------------------
@@ -138,7 +140,7 @@ class CyborgHPRoughEnvCfg(LocomotionVelocityRoughEnvCfg):
 
         # ------------------------------Commands------------------------------
         self.commands.base_velocity.resampling_time_range = (10.0, 10.0)
-        self.commands.base_velocity.rel_standing_envs = 0.7
+        self.commands.base_velocity.rel_standing_envs = 0.5
         self.commands.base_velocity.heading_command = False
         self.commands.base_velocity.ranges.lin_vel_x = (-0.5, 0.5)
         self.commands.base_velocity.ranges.lin_vel_y = (-0.3, 0.3)
