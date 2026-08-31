@@ -44,7 +44,7 @@ class CyborgHPRoughPPORunnerCfg(RslRlOnPolicyRunnerCfg):
             use_data_augmentation=False,
             use_mirror_loss=True,
             data_augmentation_func=cyborg.compute_symmetric_states,
-            mirror_loss_coeff=1.5,
+            mirror_loss_coeff=1.0,
         ),
     )
 
@@ -54,5 +54,5 @@ class CyborgHPFlatPPORunnerCfg(CyborgHPRoughPPORunnerCfg):
     def __post_init__(self):
         super().__post_init__()
 
-        self.max_iterations = 3010
+        self.max_iterations = 5010
         self.experiment_name = "cyborg_hp_flat"
