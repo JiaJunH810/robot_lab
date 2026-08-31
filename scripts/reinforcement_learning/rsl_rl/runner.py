@@ -16,7 +16,6 @@ from rsl_rl.models import MLPModel
 from rsl_rl.utils import check_nan, resolve_callable
 from rsl_rl.utils.logger import Logger
 from rsl_rl.runners import OnPolicyRunner
-import statistics
 
 class Runner(OnPolicyRunner):
     def learn(self, num_learning_iterations: int, init_at_random_ep_len: bool = False) -> None:
@@ -42,7 +41,6 @@ class Runner(OnPolicyRunner):
         # Start training
         start_it = self.current_learning_iteration
         total_it = start_it + num_learning_iterations
-        greater_episode = 0
         for it in range(start_it, total_it):
             start = time.time()
             # Rollout
@@ -94,13 +92,6 @@ class Runner(OnPolicyRunner):
             # Save model
             if self.logger.writer is not None and it % self.cfg["save_interval"] == 0:
                 self.save(os.path.join(self.logger.log_dir, f"model_{it}.pt"))  # type: ignore
-            
-            if len(self.logger.lenbuffer) > 0:
-                mean_len = statistics.mean(self.logger.lenbuffer)
-                if mean_len >= greater_episode:
-                    greater_episode = mean_len
-                    self.save(os.path.join(self.logger.log_dir, f"greater_episode.pt"))
-
         # Save the final model after training and stop the logging writer
         if self.logger.writer is not None:
             self.save(os.path.join(self.logger.log_dir, f"model_{self.current_learning_iteration}.pt"))  # type: ignore

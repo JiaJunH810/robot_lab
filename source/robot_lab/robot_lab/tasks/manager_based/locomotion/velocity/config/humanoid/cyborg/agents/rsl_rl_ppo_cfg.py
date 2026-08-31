@@ -34,7 +34,7 @@ class CyborgHPRoughPPORunnerCfg(RslRlOnPolicyRunnerCfg):
         entropy_coef=0.008,
         num_learning_epochs=5,
         num_mini_batches=4,
-        learning_rate=1.0e-4,
+        learning_rate=1.0e-3,
         schedule="adaptive",
         gamma=0.99,
         lam=0.95,
@@ -44,7 +44,7 @@ class CyborgHPRoughPPORunnerCfg(RslRlOnPolicyRunnerCfg):
             use_data_augmentation=False,
             use_mirror_loss=True,
             data_augmentation_func=cyborg.compute_symmetric_states,
-            mirror_loss_coeff=1.0,
+            mirror_loss_coeff=1.5,
         ),
     )
 
