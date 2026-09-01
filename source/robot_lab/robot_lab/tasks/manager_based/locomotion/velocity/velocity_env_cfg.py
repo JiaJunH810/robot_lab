@@ -339,7 +339,7 @@ class EventCfg:
         mode="startup",
         params={
             "asset_cfg": SceneEntityCfg("robot", body_names=".*"),
-            "com_range": {"x": (-0.06, 0.06), "y": (-0.06, 0.06), "z": (-0.06, 0.06)},
+            "com_range": {"x": (-0.06, 0.06), "y": (-0.06, 0.06), "z": (-0.02, 0.02)},
         },
     )
 
