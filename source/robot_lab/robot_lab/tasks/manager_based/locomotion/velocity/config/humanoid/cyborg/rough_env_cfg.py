@@ -101,7 +101,7 @@ class CyborgHPRoughEnvCfg(LocomotionVelocityRoughEnvCfg):
         self.rewards.track_ang_vel_z_exp.weight = 0.3
         self.rewards.track_ang_vel_z_exp.params["std"] = 0.1
         self.rewards.track_ang_vel_z_exp.func = mdp.track_ang_vel_z_world_exp
-        self.rewards.phase_ref_joint_pos.weight = 1.2
+        self.rewards.phase_ref_joint_pos.weight = 1.0
         self.rewards.phase_ref_joint_pos.params["hip_scale"] = 0.25
         self.rewards.phase_ref_joint_pos.params["knee_scale"] = 0.48
         self.rewards.periodic_contact_mismatch.weight = -0.3
@@ -109,16 +109,16 @@ class CyborgHPRoughEnvCfg(LocomotionVelocityRoughEnvCfg):
         self.rewards.periodic_contact_mismatch.params["sensor_cfg"].preserve_order = True
 
         # Others
-        self.rewards.feet_air_time.weight = 0.35
+        self.rewards.feet_air_time.weight = 0.25
         self.rewards.feet_air_time.func = mdp.feet_air_time_positive_biped
         self.rewards.feet_air_time.params["threshold"] = 0.4
         self.rewards.feet_air_time.params["sensor_cfg"].body_names = [self.foot_link_name]
         self.rewards.feet_air_time_variance.weight = 0.0
         self.rewards.feet_air_time_variance.params["sensor_cfg"].body_names = [self.foot_link_name]
-        self.rewards.feet_slide.weight = -0.3
+        self.rewards.feet_slide.weight = -0.2
         self.rewards.feet_slide.params["sensor_cfg"].body_names = [self.foot_link_name]
         self.rewards.feet_slide.params["asset_cfg"].body_names = [self.foot_link_name]
-        self.rewards.feet_orientation_l2.weight = -4.0
+        self.rewards.feet_orientation_l2.weight = -2.0
         self.rewards.feet_orientation_l2.params["asset_cfg"].body_names = [self.foot_link_name]
         # 步宽约束（防交叉脚）：期望两脚 y 距离 0.31 m（default 位姿步宽），body 顺序须为 [左, 右]
         self.rewards.feet_distance_y_exp.weight = 0.5
