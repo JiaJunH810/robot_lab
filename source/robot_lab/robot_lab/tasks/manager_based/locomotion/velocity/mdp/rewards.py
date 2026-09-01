@@ -694,11 +694,9 @@ def phase_ref_joint_pos(
     phase = torch.remainder(phase, 1.0)
 
     # Left leg swings during [0.55, 0.95) (sin < 0), right leg during [0.05, 0.45) (sin > 0).
-    # Use half-wave sin^2 references: each swing stays non-negative while
-    # retaining the alternating left/right timing of the original sine wave.
     sin_pos = torch.sin(2.0 * torch.pi * phase)
-    swing_l = torch.square(torch.clamp(-sin_pos, min=0.0))
-    swing_r = torch.square(torch.clamp(sin_pos, min=0.0))
+    swing_l = torch.clamp(-sin_pos, min=0.0)
+    swing_r = torch.clamp(sin_pos, min=0.0)
 
     # Reference = default pose + swing offsets on the sagittal joints.
     offsets = torch.stack([swing_l, swing_r] * 2, dim=1)  # (N, 4)

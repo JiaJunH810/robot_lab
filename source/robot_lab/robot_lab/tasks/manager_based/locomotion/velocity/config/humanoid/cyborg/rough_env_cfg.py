@@ -101,7 +101,7 @@ class CyborgHPRoughEnvCfg(LocomotionVelocityRoughEnvCfg):
         self.rewards.track_ang_vel_z_exp.weight = 0.3
         self.rewards.track_ang_vel_z_exp.params["std"] = 0.1
         self.rewards.track_ang_vel_z_exp.func = mdp.track_ang_vel_z_world_exp
-        self.rewards.phase_ref_joint_pos.weight = 1.0
+        self.rewards.phase_ref_joint_pos.weight = 1.2
         self.rewards.phase_ref_joint_pos.params["hip_scale"] = 0.25
         self.rewards.phase_ref_joint_pos.params["knee_scale"] = 0.48
         self.rewards.periodic_contact_mismatch.weight = -0.3
@@ -109,7 +109,7 @@ class CyborgHPRoughEnvCfg(LocomotionVelocityRoughEnvCfg):
         self.rewards.periodic_contact_mismatch.params["sensor_cfg"].preserve_order = True
 
         # Others
-        self.rewards.feet_air_time.weight = 0.25
+        self.rewards.feet_air_time.weight = 0.35
         self.rewards.feet_air_time.func = mdp.feet_air_time_positive_biped
         self.rewards.feet_air_time.params["threshold"] = 0.4
         self.rewards.feet_air_time.params["sensor_cfg"].body_names = [self.foot_link_name]
