@@ -439,7 +439,7 @@ class EventCfg:
         mode="reset",
         params={
             "asset_cfg": SceneEntityCfg("robot", joint_names=".*"),
-            "armature_distribution_params": (0.6, 1.4),
+            "armature_distribution_params": (0.8, 1.2),
             "operation": "scale",
             "distribution": "uniform",
         },
