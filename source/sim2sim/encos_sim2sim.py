@@ -85,7 +85,8 @@ class Locomotion:
         total_steps = int(sim_duration / self.m.opt.timestep)
 
         self.d.qpos[:3] = [0.0, 0.0, 0.895]
-        self.d.qpos[3:7] = [1.0, 0.0, 0.0, 0.0]
+        self.d.qpos[3:7] = [0.9990482, 0.0, -0.0436194, 0.0]
+        # self.d.qpos[3:7] = [1.0, 0.0, 0.0, 0.0]
         self.d.qpos[-12:] = default_q
         self.d.qvel[:] = 0.0
         mujoco.mj_forward(self.m, self.d)
@@ -107,14 +108,16 @@ class Locomotion:
                 self.viewer.render()
             q = self.d.qpos[-12:].astype(np.float32)
             dq = self.d.qvel[-12:].astype(np.float32)
-            torque = pd_control(
-                target_q,
-                q,
-                kp,
-                target_dq,
-                dq,
-                kd,
-            )
+            torque = pd_control(target_q, q, kp, target_dq, dq, kd,)
+
+            knee_l = self.d.qpos[self.m.jnt_qposadr[mujoco.mj_name2id(self.m, mujoco.mjtObj.mjOBJ_JOINT, "J_knee_l_pitch")]]
+            knee_r = self.d.qpos[self.m.jnt_qposadr[mujoco.mj_name2id(self.m, mujoco.mjtObj.mjOBJ_JOINT, "J_knee_r_pitch")]]
+            hip_pitch_l = self.d.qpos[self.m.jnt_qposadr[mujoco.mj_name2id(self.m, mujoco.mjtObj.mjOBJ_JOINT, "J_hip_l_pitch")]]
+            hip_pitch_r = self.d.qpos[self.m.jnt_qposadr[mujoco.mj_name2id(self.m, mujoco.mjtObj.mjOBJ_JOINT, "J_hip_r_pitch")]]
+            print(f"BaseAngVel={self.d.qvel[3:5]} "
+                  f"KneeAngel L={knee_l:.3f} R={knee_r:.3f} "
+                  f"HipPitchAngel L={hip_pitch_l:.3f} R={hip_pitch_r:.3f}")
+            
             self.d.ctrl[:] = torque
             mujoco.mj_step(self.m, self.d)
 

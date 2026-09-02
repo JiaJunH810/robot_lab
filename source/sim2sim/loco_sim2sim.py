@@ -194,12 +194,13 @@ class LocoSim2Sim:
         sim_decimation = 10
         total_steps = int(sim_duration / sim_dt)
         policy_dt = sim_dt * sim_decimation
-        self.cmd_resample_interval = int(10.0 / policy_dt)
+        self.cmd_resample_interval = int(5.0 / policy_dt)
 
         self.d.qpos[-self.num_action:] = self.lab_default_joint_pos[self.lab_to_xml]
         self.d.qvel[-self.num_action:] = 0.0
-        self.d.qpos[:3] = [0.0, 0.0, 0.94]
-        self.d.qpos[3:7] = [1.0, 0.0, 0.0, 0.0]
+        self.d.qpos[:3] = [0.0, 0.0, 0.895]
+        self.d.qpos[3:7] = [0.9990482, 0.0, -0.0436194, 0.0]
+        # self.d.qpos[3:7] = [1.0, 0.0, 0.0, 0.0]
 
         for _ in range(10):
             qj = self.d.qpos.astype(np.float32)[-self.num_action:]
@@ -261,12 +262,12 @@ class LocoSim2Sim:
                 base_ang_vel_body = self.d.sensor("angular-velocity").data.astype(np.float32)
 
                 proj_grav = projected_gravity(root_quat)
+                # 相位门控仅 moving（对齐训练：观测 phase 无 recovery_tilt_threshold）
                 moving = (
                     np.linalg.norm(self.vel_cmd[:2]) > self.command_threshold
                     or abs(self.vel_cmd[2]) > self.command_threshold
                 )
-                recovering = np.linalg.norm(proj_grav[:2]) > self.recovery_tilt_threshold
-                if not (moving or recovering):
+                if not moving:
                     phase_obs.fill(0.0)
 
                 joint_pos_rel = xml_joint_pos[self.xml_to_lab] - self.lab_default_joint_pos
@@ -300,13 +301,7 @@ class LocoSim2Sim:
                 self.viewer.cam.lookat = self.d.qpos.astype(np.float32)[:3]
                 self.viewer.render()
 
-                if self.ctrl_step % 50 == 0:
-                    # print(" ------------------ xml ------------------")
-                    # print(xml_joint_pos[self.xml_to_lab])
-                    # print(xml_joint_vel[self.xml_to_lab])
-                    # print(" ------------------ lab ------------------")
-                    # print(self.lab_default_joint_pos)
-                    # print(lab_actions)
+                if self.ctrl_step % 10 == 0:
                     t = i * sim_dt
                     bz = self.d.qpos[2]
                     qw, qx, qy, qz = self.d.qpos[3:7]
@@ -319,12 +314,20 @@ class LocoSim2Sim:
                            + (0 - xml_joint_vel_diag) * self.lab_joint_damping[self.lab_to_xml])
                     ankle_l_z = self.d.xpos[self.ankle_l_id][2]
                     ankle_r_z = self.d.xpos[self.ankle_r_id][2]
+                    knee_pitch_l = self.d.qpos[self.m.jnt_qposadr[mujoco.mj_name2id(self.m, mujoco.mjtObj.mjOBJ_JOINT, "J_knee_l_pitch")]]
+                    knee_pitch_r = self.d.qpos[self.m.jnt_qposadr[mujoco.mj_name2id(self.m, mujoco.mjtObj.mjOBJ_JOINT, "J_knee_r_pitch")]]
+                    hip_pitch_l = self.d.qpos[self.m.jnt_qposadr[mujoco.mj_name2id(self.m, mujoco.mjtObj.mjOBJ_JOINT, "J_hip_l_pitch")]]
+                    hip_pitch_r = self.d.qpos[self.m.jnt_qposadr[mujoco.mj_name2id(self.m, mujoco.mjtObj.mjOBJ_JOINT, "J_hip_r_pitch")]]
                     print(f"[{self.ctrl_step:5d} t={t:5.1f}s] BaseZ={bz:.3f} "
                           f"Pitch={math.degrees(pitch):5.1f} Roll={math.degrees(roll):5.1f} | "
                           f"AnkleZ L={ankle_l_z:.3f} R={ankle_r_z:.3f} | "
                           f"ActMean={np.mean(lab_actions):.3f} MaxErr={np.max(np.abs(err)):.3f} "
                           f"MaxTrq={np.max(np.abs(trq)):.0f} | "
-                          f"Cmd:vx={self.vel_cmd[0]:.2f} vy={self.vel_cmd[1]:.2f} wz={self.vel_cmd[2]:.2f}")
+                          f"Cmd:vx={self.vel_cmd[0]:.2f} vy={self.vel_cmd[1]:.2f} wz={self.vel_cmd[2]:.2f}" 
+                          f"BaseHeight={self.d.qpos[2]} " 
+                          f"BaseAngVel={self.d.qvel[3:5]} "
+                          f"KneePitchAngel L={knee_pitch_l:.3f} R={knee_pitch_r:.3f} "
+                          f"HipPitchAngel L={hip_pitch_l:.3f} R={hip_pitch_r:.3f}")
                     if bz < 0.5:
                         print(f"  *** FALLEN ***")
 
@@ -346,13 +349,13 @@ class LocoSim2Sim:
 
 
 if __name__ == "__main__":
-    xml_path = "/home/cyborg/Desktop/projects/robot_lab/source/sim2real/assets/temp/biped_temp_1_0_fixed.xml"
-    policy_path = "/home/cyborg/Desktop/projects/robot_lab/logs/rsl_rl/cyborg_hp_flat/2026-07-30_18-16-03/exported/policy.onnx"
+    xml_path = "/home/cyborg/Desktop/projects/robot_lab/source/sim2sim/assets/temp/biped_temp_1_0_fixed.xml"
+    policy_path = "/home/cyborg/Desktop/projects/robot_lab/logs/rsl_rl/cyborg_hp_flat/2026-09-02_11-19-54/exported/policy.onnx"
 
     sim = LocoSim2Sim(
         xml_path,
         policy_path,
         history_length=15,
-        cmd_max=(0.6, 0.4, 0.6),
+        cmd_max=(0.5, 0.3, 0.5),
     )
     sim.run(sim_duration=120.0)
