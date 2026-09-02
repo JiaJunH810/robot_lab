@@ -901,11 +901,28 @@ def flat_orientation_l2(env: ManagerBasedRLEnv, asset_cfg: SceneEntityCfg = Scen
 
 def orientation_exp(
     env: ManagerBasedRLEnv,
-    tolerance: float = 0.05,
+    pitch_tolerance: float = 0.05,
+    roll_tolerance: float = 0.0,
     asset_cfg: SceneEntityCfg = SceneEntityCfg("robot"),
 ) -> torch.Tensor:
-    """Reward a stable base orientation with a small tilt tolerance."""
+    """Reward a stable base orientation with independent roll/pitch tolerances.
+
+    The projected-gravity x component represents pitch tilt and the y component
+    represents roll tilt.  The tolerance values are therefore expressed in the
+    projected-gravity space (for example, ``sin(4 degrees)``), rather than in
+    radians directly.
+    """
     asset: RigidObject = env.scene[asset_cfg.name]
-    tilt = torch.linalg.norm(asset.data.projected_gravity_b[:, :2], dim=1)
-    tilt_error = torch.clamp(tilt - tolerance, min=0.0)
+    projected_gravity_xy = asset.data.projected_gravity_b[:, :2]
+
+    # Body-frame gravity: x is pitch-related and y is roll-related.
+    pitch_error = torch.clamp(
+        torch.abs(projected_gravity_xy[:, 0]) - pitch_tolerance,
+        min=0.0,
+    )
+    roll_error = torch.clamp(
+        torch.abs(projected_gravity_xy[:, 1]) - roll_tolerance,
+        min=0.0,
+    )
+    tilt_error = torch.linalg.norm(torch.stack((pitch_error, roll_error), dim=1), dim=1)
     return torch.exp(-10.0 * tilt_error)
