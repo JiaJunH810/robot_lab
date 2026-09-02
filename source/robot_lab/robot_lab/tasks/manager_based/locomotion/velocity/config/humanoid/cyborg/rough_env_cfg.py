@@ -112,7 +112,7 @@ class CyborgHPRoughEnvCfg(LocomotionVelocityRoughEnvCfg):
         self.rewards.periodic_contact_mismatch.params["sensor_cfg"].preserve_order = True
 
         # Others
-        self.rewards.feet_air_time.weight = 0.25
+        self.rewards.feet_air_time.weight = 0.50
         self.rewards.feet_air_time.func = mdp.feet_air_time_positive_biped
         self.rewards.feet_air_time.params["threshold"] = 0.4
         self.rewards.feet_air_time.params["sensor_cfg"].body_names = [self.foot_link_name]
