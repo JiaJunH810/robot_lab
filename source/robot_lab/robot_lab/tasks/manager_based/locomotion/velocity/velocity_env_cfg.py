@@ -369,8 +369,8 @@ class EventCfg:
         mode="reset",
         params={
             "asset_cfg": SceneEntityCfg("robot", joint_names=".*"),
-            "stiffness_distribution_params": (0.7, 1.3),
-            "damping_distribution_params": (0.7, 1.3),
+            "stiffness_distribution_params": (0.6, 1.4),
+            "damping_distribution_params": (0.6, 1.4),
             "operation": "scale",
             "distribution": "uniform",
         },
@@ -439,7 +439,7 @@ class EventCfg:
         mode="reset",
         params={
             "asset_cfg": SceneEntityCfg("robot", joint_names=".*"),
-            "armature_distribution_params": (0.8, 1.2),
+            "armature_distribution_params": (0.6, 1.4),
             "operation": "scale",
             "distribution": "uniform",
         },
