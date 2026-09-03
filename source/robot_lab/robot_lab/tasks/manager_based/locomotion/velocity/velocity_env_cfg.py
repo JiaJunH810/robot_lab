@@ -725,7 +725,7 @@ class RewardsCfg:
             "command_threshold": 0.1,
             # Points are expressed in ankle_*_roll_link local coordinates.
             "sole_point_offset": (0.0, 0.0, -0.068),
-            "toe_point_offset": (0.17, 0.0, -0.068),
+            "toe_point_offset": (0.17, 0.0, -0.060),
             "asset_cfg": SceneEntityCfg(
                 "robot",
                 body_names=["ankle_l_roll_link", "ankle_r_roll_link"],
