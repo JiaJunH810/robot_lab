@@ -716,15 +716,26 @@ class RewardsCfg:
         },
     )
 
-    phase_feet_height = RewTerm(
-        func=mdp.phase_feet_height,
+    feet_clearance = RewTerm(
+        func=mdp.feet_clearance,
         weight=0.0,
         params={
             "command_name": "base_velocity",
-            "cycle_time": 0.9,
-            "peak_clearance": 0.055,
+            "target_height": 0.02,
             "command_threshold": 0.1,
-            "asset_cfg": SceneEntityCfg("robot", body_names=[""], preserve_order=True,)
+            # Points are expressed in ankle_*_roll_link local coordinates.
+            "sole_point_offset": (0.0, 0.0, -0.068),
+            "toe_point_offset": (0.17, 0.0, -0.068),
+            "asset_cfg": SceneEntityCfg(
+                "robot",
+                body_names=["ankle_l_roll_link", "ankle_r_roll_link"],
+                preserve_order=True,
+            ),
+            "sensor_cfg": SceneEntityCfg(
+                "contact_forces",
+                body_names=["ankle_l_roll_link", "ankle_r_roll_link"],
+                preserve_order=True,
+            ),
         },
     )
 

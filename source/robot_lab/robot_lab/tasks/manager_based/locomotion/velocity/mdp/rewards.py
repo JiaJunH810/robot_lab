@@ -629,45 +629,66 @@ def feet_height_body(
     reward *= torch.clamp(-env.scene["robot"].data.projected_gravity_b[:, 2], 0, 0.7) / 0.7
     return reward
 
-def phase_feet_height(
+def feet_clearance(
     env: ManagerBasedRLEnv,
     command_name: str,
+    sensor_cfg: SceneEntityCfg,
     asset_cfg: SceneEntityCfg,
-    cycle_time: float,
-    peak_clearance: float,
+    target_height: float,
+    sole_point_offset: tuple[float, float, float],
+    toe_point_offset: tuple[float, float, float],
     command_threshold: float,
 ) -> torch.Tensor:
-    """Penalize deviation from a single-peaked relative swing-foot trajectory.
+    """Reward a foot after it is detected as airborne and clears a height.
 
-    The foot order in asset_cfg must be [left, right].
+    ``asset_cfg.body_ids`` and ``sensor_cfg.body_ids`` must both be ordered as
+    ``[left, right]``.  The Cyborg asset has no separate toe or sole rigid
+    bodies, so the two representative points are defined in each foot-link
+    frame and transformed to world space.  The minimum z of those points is
+    used as the foot height.  Contact state, rather than phase, determines
+    whether a foot is in the air.
     """
-    asset: RigidObject = env.scene[asset_cfg.name]
+    asset: Articulation = env.scene[asset_cfg.name]
+    contact_sensor: ContactSensor = env.scene.sensors[sensor_cfg.name]
+    foot_pos_w = asset.data.body_link_pos_w[:, asset_cfg.body_ids, :]
+    foot_quat_w = asset.data.body_link_quat_w[:, asset_cfg.body_ids]
+    num_envs, num_feet = foot_pos_w.shape[:2]
+    if num_feet != 2:
+        raise ValueError("feet_clearance expects exactly two feet ordered as [left, right].")
 
-    phase = env.episode_length_buf.float() * env.step_dt / cycle_time
-    phase = torch.remainder(phase, 1.0)
+    # Local points are [sole-center, toe-center].  Keep them as a tensor on the
+    # same device/dtype as the simulation state to avoid CPU/device promotion.
+    point_offsets = foot_pos_w.new_tensor([sole_point_offset, toe_point_offset])
+    num_points = point_offsets.shape[0]
+    point_offsets = point_offsets.view(1, 1, num_points, 3).expand(num_envs, num_feet, -1, -1)
+    point_quats = foot_quat_w.unsqueeze(2).expand(-1, -1, num_points, -1)
+    point_pos_w = foot_pos_w.unsqueeze(2) + math_utils.quat_apply(
+        point_quats.reshape(-1, 4), point_offsets.reshape(-1, 3)
+    ).reshape(num_envs, num_feet, num_points, 3)
 
-    # Left foot swings during [0.55, 0.95).
-    left_swing = (phase >= 0.55) & (phase < 0.95)
-    left_progress = torch.clamp((phase - 0.55) / 0.40, min=0.0, max=1.0,)
-    # Right foot swings during [0.05, 0.45).
-    right_swing = (phase >= 0.05) & (phase < 0.45)
-    right_progress = torch.clamp((phase - 0.05) / 0.40, min=0.0, max=1.0,)
-    # Single-peaked smooth swing trajectories.
-    left_target = (peak_clearance * torch.sin(torch.pi * left_progress).square())
-    right_target = (peak_clearance * torch.sin(torch.pi * right_progress).square())
-    foot_height = asset.data.body_pos_w[:, asset_cfg.body_ids, 2]
-    # asset_cfg order must be [left, right].
-    left_height_relative = foot_height[:, 0] - foot_height[:, 1]
-    right_height_relative = foot_height[:, 1] - foot_height[:, 0]
-    left_error = torch.square((left_height_relative - left_target) / peak_clearance)
-    right_error = torch.square((right_height_relative - right_target) / peak_clearance)
+    # Use height relative to each environment origin, rather than raw world z.
+    foot_height = (
+        point_pos_w[..., 2] - env.scene.env_origins[:, 2].view(num_envs, 1, 1)
+    ).amin(dim=2)
 
-    # Only the expected swing foot receives a height penalty.
-    penalty = (left_error * left_swing.float() + right_error * right_swing.float())
-    # Avoid excessive reward magnitude when the robot falls.
-    penalty = torch.clamp(penalty, max=4.0)
-    phase_active = _phase_active(env, command_name, command_threshold)
-    return penalty * phase_active.float()
+    # A foot is considered lifted when the contact sensor reports no current
+    # contact.  This avoids assuming a phase schedule and also catches an
+    # unexpected early lift or toe tap.
+    in_air = (contact_sensor.data.current_contact_time[:, sensor_cfg.body_ids] <= 0.0).to(
+        dtype=foot_height.dtype
+    )
+
+    # Strict threshold: an airborne foot is rewarded only after its lowest
+    # representative point is higher than target_height.
+    clearance_reward = (foot_height > target_height).to(dtype=foot_height.dtype)
+    reward = torch.sum(clearance_reward * in_air, dim=1)
+    command = env.command_manager.get_command(command_name)
+    command_active = (torch.linalg.norm(command[:, :2], dim=1) > command_threshold) | (
+        torch.abs(command[:, 2]) > command_threshold
+    )
+    reward *= command_active.float()
+    reward *= torch.clamp(-env.scene["robot"].data.projected_gravity_b[:, 2], 0, 0.7) / 0.7
+    return reward
 
 
 def phase_ref_joint_pos(
