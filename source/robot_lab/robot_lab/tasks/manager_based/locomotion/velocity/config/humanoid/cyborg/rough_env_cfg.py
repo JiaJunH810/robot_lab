@@ -62,12 +62,12 @@ class CyborgHPRoughEnvCfg(LocomotionVelocityRoughEnvCfg):
         self.rewards.is_terminated.weight = -200.0
 
         # Root penalties
-        self.rewards.vel_mismatch_exp.weight = 0.2
-        self.rewards.base_acc.weight = 0.3
+        self.rewards.vel_mismatch_exp.weight = 0.1
+        self.rewards.base_acc.weight = 0.2
         self.rewards.flat_orientation_l2.func = mdp.orientation_exp
         self.rewards.flat_orientation_l2.weight = 0.3
-        # Pitch 设置 2° 容忍区；Roll 仍不设置容忍区。
-        self.rewards.flat_orientation_l2.params["pitch_tolerance"] = 0.0349065850
+        # Pitch 设置 3° 容忍区；Roll 仍不设置容忍区。
+        self.rewards.flat_orientation_l2.params["pitch_tolerance"] = 0.0523359562
         self.rewards.flat_orientation_l2.params["roll_tolerance"] = 0.0
         # base_height_l2 -10.0（防塌锚定，替代 stand_still 软化后的防塌角色）：
         # 塌 5cm 罚 0.025/步、塌 10cm 罚 0.10/步；柔顺变形 1-2cm 几乎不罚
@@ -80,11 +80,11 @@ class CyborgHPRoughEnvCfg(LocomotionVelocityRoughEnvCfg):
         self.rewards.joint_torques_l2.params["asset_cfg"].joint_names = ["J_hip_.*", "J_knee_.*", "J_ankle_.*",]
         # 与 2026-08-28_02-28-38 行走基线保持一致
         self.rewards.joint_vel_l2.weight = -1e-5
-        self.rewards.joint_acc_l2.weight = -3e-7
+        self.rewards.joint_acc_l2.weight = -1e-7
         self.rewards.joint_acc_l2.params["asset_cfg"].joint_names = ["J_hip_.*", "J_knee_.*", "J_ankle_.*",]
         # 只保留髋关节偏移惩罚（Cyborg HP 无臂无腰）
-        self.rewards.create_joint_deviation_l1_rewterm("joint_deviation_hip_yaw_l1", -2.0, ["J_hip_.*_yaw"])
-        self.rewards.create_joint_deviation_l1_rewterm("joint_deviation_hip_roll_l1", -2.0, ["J_hip_.*_roll"])
+        self.rewards.create_joint_deviation_l1_rewterm("joint_deviation_hip_yaw_l1", -1.75, ["J_hip_.*_yaw"])
+        self.rewards.create_joint_deviation_l1_rewterm("joint_deviation_hip_roll_l1", -1.25, ["J_hip_.*_roll"])
         self.rewards.joint_pos_limits.weight = -0.5
         # stand_still -1.0 → -0.3（软化）：被压时关节允许变形（柔顺），防塌由 base_height_l2 接管
         self.rewards.stand_still.weight = -0.1
@@ -99,12 +99,12 @@ class CyborgHPRoughEnvCfg(LocomotionVelocityRoughEnvCfg):
         self.rewards.contact_forces.params["sensor_cfg"].body_names = [self.foot_link_name]
 
         # Velocity-tracking rewards
-        self.rewards.track_lin_vel_x_exp.weight = 0.4
-        self.rewards.track_lin_vel_y_exp.weight = 0.4
-        self.rewards.track_ang_vel_z_exp.weight = 0.4
+        self.rewards.track_lin_vel_x_exp.weight = 0.3
+        self.rewards.track_lin_vel_y_exp.weight = 0.3
+        self.rewards.track_ang_vel_z_exp.weight = 0.3
         self.rewards.track_ang_vel_z_exp.params["std"] = 0.1
         self.rewards.track_ang_vel_z_exp.func = mdp.track_ang_vel_z_world_exp
-        self.rewards.phase_ref_joint_pos.weight = 1.3
+        self.rewards.phase_ref_joint_pos.weight = 1.0
         # 基于 2026-09-01_17-48-08 基线，适度降低抬脚参考幅值。
         self.rewards.phase_ref_joint_pos.params["hip_scale"] = 0.18
         self.rewards.phase_ref_joint_pos.params["knee_scale"] = 0.28
@@ -132,7 +132,7 @@ class CyborgHPRoughEnvCfg(LocomotionVelocityRoughEnvCfg):
         self.rewards.feet_orientation_l2.params["asset_cfg"].body_names = [self.foot_link_name]
         # 步宽约束（防交叉脚）：期望两脚 y 距离 0.31 m（default 位姿步宽），body 顺序须为 [左, 右]
         self.rewards.feet_distance_y_exp.weight = 0.25
-        self.rewards.feet_distance_y_exp.params["std"] = 0.2
+        self.rewards.feet_distance_y_exp.params["std"] = 0.15
         self.rewards.feet_distance_y_exp.params["stance_width"] = 0.31
         self.rewards.feet_distance_y_exp.params["asset_cfg"].body_names = [self.foot_link_name]
         self.rewards.feet_distance_y_exp.params["asset_cfg"].preserve_order = True
@@ -150,11 +150,10 @@ class CyborgHPRoughEnvCfg(LocomotionVelocityRoughEnvCfg):
 
         # ------------------------------Commands------------------------------
         self.commands.base_velocity.resampling_time_range = (10.0, 10.0)
-        self.commands.base_velocity.max_acceleration = (0.15, 0.10, 0.075)
-        self.commands.base_velocity.rel_standing_envs = 0.3
+        self.commands.base_velocity.rel_standing_envs = 0.4
         self.commands.base_velocity.heading_command = False
-        self.commands.base_velocity.ranges.lin_vel_x = (-0.3, 0.3)
-        self.commands.base_velocity.ranges.lin_vel_y = (-0.15, 0.15)
+        self.commands.base_velocity.ranges.lin_vel_x = (-0.5, 0.5)
+        self.commands.base_velocity.ranges.lin_vel_y = (-0.3, 0.3)
         self.commands.base_velocity.ranges.ang_vel_z = (-0.15, 0.15)
 
         # ------------------------------Episode------------------------------
