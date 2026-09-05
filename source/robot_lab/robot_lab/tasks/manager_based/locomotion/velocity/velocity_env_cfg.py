@@ -159,7 +159,7 @@ class ObservationsCfg:
         projected_gravity = ObsTerm(
             func=mdp.delayed_projected_gravity,
             params={"action_name": "joint_pos"},
-            noise=Unoise(n_min=-0.08, n_max=0.08),
+            noise=Unoise(n_min=-0.05, n_max=0.05),
             clip=(-100.0, 100.0),
             scale=1.0,
         )

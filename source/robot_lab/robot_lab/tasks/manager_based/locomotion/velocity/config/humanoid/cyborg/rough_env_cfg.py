@@ -59,15 +59,15 @@ class CyborgHPRoughEnvCfg(LocomotionVelocityRoughEnvCfg):
 
         # ------------------------------Rewards------------------------------
         # General
-        self.rewards.is_terminated.weight = -200.0
+        self.rewards.is_terminated.weight = 0.0
 
         # Root penalties
         self.rewards.vel_mismatch_exp.weight = 0.1
         self.rewards.base_acc.weight = 0.2
         self.rewards.flat_orientation_l2.func = mdp.orientation_exp
         self.rewards.flat_orientation_l2.weight = 0.3
-        # Pitch 设置 2° 容忍区；Roll 仍不设置容忍区。
-        self.rewards.flat_orientation_l2.params["pitch_tolerance"] = 0.0348994967
+        # Pitch 设置 3° 容忍区；Roll 仍不设置容忍区。
+        self.rewards.flat_orientation_l2.params["pitch_tolerance"] = 0.0523359562
         self.rewards.flat_orientation_l2.params["roll_tolerance"] = 0.0
         # base_height_l2 -10.0（防塌锚定，替代 stand_still 软化后的防塌角色）：
         # 塌 5cm 罚 0.025/步、塌 10cm 罚 0.10/步；柔顺变形 1-2cm 几乎不罚
@@ -142,8 +142,11 @@ class CyborgHPRoughEnvCfg(LocomotionVelocityRoughEnvCfg):
             self.disable_zero_weight_rewards()
 
         # ------------------------------Terminations------------------------------
-        self.terminations.illegal_contact = None
-        self.terminations.bad_base_height.params["minimum_height"] = 0.65
+        # 启用非法接触终结，但只监测 base_link；脚底正常接触地面不能触发终结。
+        self.terminations.illegal_contact.params["sensor_cfg"].body_names = [self.base_link_name]
+        # 去掉另外两个状态终结项，保留 time_out 和 terrain_out_of_bounds（超时类）。
+        self.terminations.bad_orientation = None
+        self.terminations.bad_base_height = None
 
         # ------------------------------Curriculums------------------------------
         # Enabled: start at 10% velocity range, scale up to 100% as tracking improves
