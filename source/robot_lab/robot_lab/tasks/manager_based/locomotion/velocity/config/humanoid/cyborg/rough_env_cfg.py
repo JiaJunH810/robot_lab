@@ -46,7 +46,13 @@ class CyborgHPRoughEnvCfg(LocomotionVelocityRoughEnvCfg):
             preserve_order=True,
             delay_steps=(1, 20),
             joint_obs_delay_steps=(1, 10),
-            imu_obs_delay_steps=(1, 10)
+            imu_obs_delay_steps=(1, 10),
+            # 每个环境 reset 时固定采样一次的 IMU 安装姿态误差（弧度）。
+            imu_mount_rpy_range=(
+                (-0.05235988, 0.05235988),
+                (-0.05235988, 0.05235988),
+                (-0.05235988, 0.05235988),
+            ),
         )
 
         # ------------------------------Events------------------------------

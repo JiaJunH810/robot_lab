@@ -11,6 +11,7 @@ from isaaclab.envs.mdp.actions.actions_cfg import JointPositionActionCfg
 from isaaclab.envs.mdp.actions.joint_actions import JointPositionAction
 from isaaclab.managers import ActionTerm
 from isaaclab.utils import configclass, DelayBuffer
+import isaaclab.utils.math as math_utils
 
 
 class DelayedJointPositionAction(JointPositionAction):
@@ -45,6 +46,10 @@ class DelayedJointPositionAction(JointPositionAction):
         self._imu_obs_buffer = DelayBuffer(cfg.imu_obs_delay_steps[1], self.num_envs, self.device)
         self._delayed_joint_obs = torch.zeros(self.num_envs, 2 * self.action_dim, device=self.device)
         self._delayed_imu_obs = torch.zeros(self.num_envs, 6, device=self.device)
+        self._imu_mount_rpy_range = torch.tensor(cfg.imu_mount_rpy_range, device=self.device)
+        self._imu_mount_quat = torch.zeros(self.num_envs, 4, device=self.device)
+        self._imu_mount_quat[:, 0] = 1.0
+        self._resample_imu_mount(self._env_ids)
 
         self._resample_obs_delay(self._env_ids)
 
@@ -85,6 +90,15 @@ class DelayedJointPositionAction(JointPositionAction):
         self._joint_obs_buffer.set_time_lag(joint_lag, env_ids)
         self._imu_obs_buffer.set_time_lag(imu_lag, env_ids)
 
+    def _resample_imu_mount(self, env_ids: torch.Tensor):
+        rpy_range = self._imu_mount_rpy_range
+        rpy = rpy_range[:, 0] + torch.rand(
+            (len(env_ids), 3), device=self.device
+        ) * (rpy_range[:, 1] - rpy_range[:, 0])
+        self._imu_mount_quat[env_ids] = math_utils.quat_from_euler_xyz(
+            rpy[:, 0], rpy[:, 1], rpy[:, 2]
+        )
+
     def _get_sensor_obs(self):
         joint_obs = torch.cat(
             (
@@ -98,8 +112,8 @@ class DelayedJointPositionAction(JointPositionAction):
 
         imu_obs = torch.cat(
             (
-                self._asset.data.root_ang_vel_b,
-                self._asset.data.projected_gravity_b,
+                math_utils.quat_apply(self._imu_mount_quat, self._asset.data.root_ang_vel_b),
+                math_utils.quat_apply(self._imu_mount_quat, self._asset.data.projected_gravity_b),
             ),
             dim=-1,
         )
@@ -136,6 +150,7 @@ class DelayedJointPositionAction(JointPositionAction):
         self._delay_per_env[env_ids] = torch.randint(
             self._min_delay, self._max_delay + 1, (len(env_ids),), device=self.device
         )
+        self._resample_imu_mount(env_ids)
 
         joint_obs, imu_obs = self._get_sensor_obs()
         self._delayed_joint_obs[env_ids] = joint_obs[env_ids]
@@ -159,4 +174,7 @@ class DelayedJointPositionActionCfg(JointPositionActionCfg):
     delay_steps: int | tuple[int, int] = 0
     joint_obs_delay_steps: tuple[int, int] = (0, 0)
     imu_obs_delay_steps: tuple[int, int] = (0, 0)
+    imu_mount_rpy_range: tuple[tuple[float, float], tuple[float, float], tuple[float, float]] = (
+        (0.0, 0.0), (0.0, 0.0), (0.0, 0.0)
+    )
     """Fixed delay or inclusive per-environment delay range, in physics steps."""
