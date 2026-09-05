@@ -159,7 +159,7 @@ class ObservationsCfg:
         projected_gravity = ObsTerm(
             func=mdp.delayed_projected_gravity,
             params={"action_name": "joint_pos"},
-            noise=Unoise(n_min=-0.05, n_max=0.05),
+            noise=Unoise(n_min=-0.08, n_max=0.08),
             clip=(-100.0, 100.0),
             scale=1.0,
         )
@@ -416,11 +416,11 @@ class EventCfg:
         interval_range_s=(8.0, 15.0),
         params={
             "velocity_range": {
-                "x": (-0.25, 0.25),
-                "y": (-0.25, 0.25),
-                "roll": (-0.2, 0.2),
-                "pitch": (-0.2, 0.2),
-                "yaw": (-0.3, 0.3),
+                "x": (-1.5, 1.5),
+                "y": (-1.5, 1.5),
+                "roll": (-1.2, 1.2),
+                "pitch": (-1.2, 1.2),
+                "yaw": (-1.8, 1.8),
             }
         },
     )
